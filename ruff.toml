@@ -1,0 +1,168 @@
+# Ruff configuration file
+# https://docs.astral.sh/ruff/configuration/
+
+exclude = [
+    ".git", ".venv", "__pycache__", "dist", "build", "node_modules",
+    ".ruff_cache", ".pytest_cache", ".ipynb_checkpoints", "site-packages"
+]
+line-length = 120
+indent-width = 4
+target-version = "py313"
+
+[lint]
+select = [
+    # Pyflakes
+    "F",
+    # pycodestyle
+    "E",
+    "W",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # flake8-comprehensions
+    "C4",
+    # flake8-annotations
+    "ANN",
+    # flake8-async
+    "ASYNC",
+    # flake8-boolean-trap
+    "FBT",
+    # flake8-builtins
+    "A",
+    # flake8-commas
+    "COM",
+    # flake8-datetimez
+    "DTZ",
+    # flake8-debugger
+    "T10",
+    # flake8-errmsg
+    "EM",
+    # flake8-implicit-str-concat
+    "ISC",
+    # flake8-import-conventions
+    "ICN",
+    # flake8-logging
+    "LOG",
+    # flake8-logging-format
+    "G",
+    # flake8-no-pep420
+    "INP",
+    # flake8-pie
+    "PIE",
+    # flake8-print
+    "T20",
+    # flake8-pyi
+    "PYI",
+    # flake8-pytest-style
+    "PT",
+    # flake8-quotes
+    "Q",
+    # flake8-raise
+    "RSE",
+    # flake8-return
+    "RET",
+    # flake8-self
+    "SLF",
+    # flake8-slots
+    "SLOT",
+    # flake8-type-checking
+    "TCH",
+    # flake8-unused-arguments
+    "ARG",
+    # flake8-use-pathlib
+    "PTH",
+    # eradicate
+    "ERA",
+    # pandas-vet
+    "PD",
+    # pygrep-hooks
+    "PGH",
+    # Pylint
+    "PL",
+    # tryceratops
+    "TRY",
+    # flynt
+    "FLY",
+    # NumPy-specific rules
+    "NPY",
+    # refurb
+    "FURB",
+    # Ruff-specific rules
+    "RUF",
+    # pydocstyle
+    "D",
+    # isort
+    "I",
+    # mccabe
+    "C90",
+    # pep8-naming
+    "N",
+    # pyupgrade
+    "UP",
+]
+ignore = [
+    "FBT001",  # Boolean-typed positional argument in function definition
+    "FBT002",  # Boolean default positional argument in function definition
+    "ANN101",  # Missing type annotation for self
+    "ANN102",  # Missing type annotation for cls
+    "ANN401",  # Missing type annotation for *args
+    "D100",    # Missing docstring in public module
+    "D101",    # Missing docstring in public class
+    "D102",    # Missing docstring in public method
+    "D103",    # Missing docstring in public function
+    "D104",    # Missing docstring in public package
+    "D105",    # Missing docstring in magic method
+    "D106",    # Missing docstring in public nested class
+    "D107",    # Missing docstring in __init__
+    "D203",    # 1 blank line required before class docstring (incompatible with D211)
+    "D213",    # Multi-line docstring summary should start at the second line (incompatible with D212)
+    "COM812",  # Trailing comma missing (conflicts with formatter)
+    "ISC001",  # Single line implicit string concatenation (conflicts with formatter)
+    "SLF001",  # Private member accessed
+]
+fixable = ["ALL"]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",    # Use of assert detected
+    "ARG",     # Unused function args -> fixtures nevertheless are functionally relevant
+    "FBT",     # Don't care about booleans as positional arguments in tests
+    "PLR2004", # Magic value used in comparison
+    "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+    "ANN",     # Type annotations not required for tests
+    "D",       # Docstrings not required for tests
+]
+"__init__.py" = ["D104", "F401", "I001"]  # Allow unused imports in __init__ files
+
+[lint.isort]
+known-first-party = ["src", "mcp_server"]
+combine-as-imports = true
+force-single-line = false
+lines-after-imports = 2
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.pep8-naming]
+classmethod-decorators = ["classmethod", "pydantic.field_validator"]
+
+[lint.pylint]
+max-args = 6
+max-branches = 12
+max-returns = 6
+max-statements = 50
+
+[lint.pydocstyle]
+convention = "google"  # Use Google docstring convention
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true  # Format code snippets in docstrings
+docstring-code-line-length = 72

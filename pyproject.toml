@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tenrec"
+version = "0.1.0"
+description = "A modern MCP server implementation for IDA Pro using ida-domain and FastMCP."
+readme = "README.md"
+license = {text = "GPL-3.0"}
+authors = [{name = "Axel Mierczuk"}]
+requires-python = ">=3.10"
+dependencies = [
+    "cdifflib==1.2.9",
+    "fastmcp>=2.12.3",
+    "gunicorn>=23.0.0",
+    "ida-domain==0.2.0",
+    "jinja2>=3.1.6",
+    "loguru>=0.7.3",
+    "rich-click>=1.8.9",
+    "setuptools>=61.0",
+    "termcolor>=3.1.0",
+    "giturlparse>=0.12.0",
+    "gitpython>=3.1.45",
+]
+
+[project.scripts]
+tenrec = "tenrec.__main__:main"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["tenrec"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.13.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.12.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-timeout>=2.2.0",
+    "hatchling>=1.27",
+]

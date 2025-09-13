@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="IE=edge" http-equiv="X-UA-Compatible">
+    <meta content="width=device-width, initial-scale=1, minimum-scale=1.0, shrink-to-fit=no, viewport-fit=cover" name="viewport">
+    <meta content="" name="description">
+    <title>tenrec Documentation</title>
+    <link href="https://cdn.jsdelivr.net/gh/A5yncX/docsify-theme-darcula@v1.0/darcula.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+
+    <!-- Custom Styles -->
+    <style>
+        :root {
+            /* --theme-hue: 325; */
+        }
+
+        .search {
+            border-bottom: 1px solid rgba(182, 149, 243, 0.61) !important;
+        }
+
+        .return-type {
+            color: #FFB86C;
+            font-weight: bold;
+        }
+
+        .function-name {
+            color: #50FA7B;
+            font-weight: bold;
+        }
+
+        .parameter {
+            /*color: #FFB86C;*/
+            font-weight: 500;
+        }
+
+        .language-python .token.keyword:first-child {
+            display: none; /* hides "def" */
+        }
+
+        .language-python .token.punctuation:last-child {
+            display: none; /* hides ":" */
+        }
+
+        .language-python {
+            background: #1e1e25 !important;
+        }
+
+        code.language-python {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        pre.language-python {
+            margin-top: 2em !important;
+        }
+        /* Function names */
+        .token.function {
+            color: rgba(80, 250, 123, 0.79);
+        }
+
+        /* Type annotations */
+        .token.builtin,
+        .token.class-name {
+            color: #FFB86C;
+        }
+
+        /* Return arrow -> */
+        .token.operator {
+            color: #FFB86C;
+        }
+
+        /* Parameters */
+        .token.parameter {
+            color: #48dbfb;
+        }
+        .logo {
+            vertical-align: middle;
+            margin: auto;
+            display: block;
+        }
+        .logo-title {
+            vertical-align: middle;
+        }
+        .app-name-link {
+            color: #8e6ccd !important;
+        }
+    </style>
+</head>
+<body>
+<div id="app">Please wait...</div>
+<script>
+    window.$docsify = {
+        icon: '_media/icon.svg',
+        name: 'tenrec',
+        repo: '',
+        basePath: '/tenrec/',
+        loadSidebar: true,
+        subMaxLevel: 3,
+        search: {
+            placeholder: 'Search...',
+            noData: 'No results found.',
+            depth: 3
+        },
+        plugins: [
+            function (hook, vm) {
+                hook.beforeEach(function (html) {
+                    // Fix: change 'plugins' to 'function'
+                    return html.replace(
+                        /```function\n([\s\S]*?)\n```/g,
+                        '<pre><code class="language-python">$1</code></pre>'
+                    );
+                });
+            },
+            function (hook, vm) {
+                hook.doneEach(function () {
+                    if (window.Prism) {
+                        window.Prism.highlightAll();
+                    }
+                });
+            }
+        ]
+    }
+</script>
+<!-- Required -->
+<script src="//cdn.jsdelivr.net/npm/docsify/lib/docsify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/js/docsify-themeable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/zoom-image.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+
+</body>
+</html>
