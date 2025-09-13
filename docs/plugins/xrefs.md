@@ -58,7 +58,7 @@ Get the call graph for a function up to a certain depth.
 
 ```function
 def xrefs_get_xrefs_from(
-    ea: HexEA,
+    address: HexEA,
     flags: XrefsFlags = 4,
     offset: int = 0,
     limit: int = 100
@@ -67,7 +67,7 @@ def xrefs_get_xrefs_from(
 Get all function calls made from a specific address.
 
 **Args:**
-- **<span class='parameter'>ea</span>** (**<span class='return-type'>HexEA</span>**): Source address containing call instructions.
+- **<span class='parameter'>address</span>** (**<span class='return-type'>HexEA</span>**): Source address containing call instructions.
 - **<span class='parameter'>flags</span>** (**<span class='return-type'>XrefsFlags</span>**): The kind of xrefs to consider. Options are:
 	 - `ALL`: *0*
 	 - `NOFLOW`: *1*
@@ -85,7 +85,7 @@ Get all function calls made from a specific address.
 
 ```function
 def xrefs_get_xrefs_to(
-    ea: HexEA,
+    address: HexEA,
     flags: XrefsFlags = 4,
     offset: int = 0,
     limit: int = 100
@@ -94,7 +94,7 @@ def xrefs_get_xrefs_to(
 Get all locations that call a specific address.
 
 **Args:**
-- **<span class='parameter'>ea</span>** (**<span class='return-type'>HexEA</span>**): Target address being called.
+- **<span class='parameter'>address</span>** (**<span class='return-type'>HexEA</span>**): Target address being called.
 - **<span class='parameter'>flags</span>** (**<span class='return-type'>XrefsFlags</span>**): The kind of xrefs to consider. Options are:
 	 - `ALL`: *0*
 	 - `NOFLOW`: *1*
