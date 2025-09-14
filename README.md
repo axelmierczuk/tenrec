@@ -1,13 +1,13 @@
 
 <p align="center">
-  <img alt="logo" src="tenrec/documentation/static/_media/icon.svg" width="30%" height="30%">
+  <img alt="logo" src="https://raw.githubusercontent.com/axelmierczuk/tenrec/refs/heads/main/tenrec/documentation/static/_media/icon.svg" width="30%" height="30%">
 </p>
 
 # Tenrec
 
 [![PyPI](https://img.shields.io/pypi/v/tenrec)](https://pypi.org/project/tenrec/)
-[![Python Version](https://img.shields.io/pypi/pyversions/tenrec-ida-mcp)](https://pypi.org/project/tenrec/)
-[![License](https://img.shields.io/pypi/l/tenrec)](https://img.shields.io/pypi/l/tenrec/)
+[![Python Version](https://img.shields.io/pypi/pyversions/tenrec)](https://pypi.org/project/tenrec/)
+[![License](https://img.shields.io/pypi/l/tenrec)](https://img.shields.io/pypi/l/tenrec/0.1.0)
 
 A lightweight, extendable, multi-session, IDA Pro MCP framework built with [ida-domain](https://ida-domain.docs.hex-rays.com/)
 and FastMCP, inspired by [mrexodia/ida-pro-mcp](https://github.com/mrexodia/ida-pro-mcp). Supports custom plugins 
