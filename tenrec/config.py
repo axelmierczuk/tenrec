@@ -1,45 +1,90 @@
-import sys
+import json
+from copy import deepcopy
 from pathlib import Path
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Any
 
-from pydantic import BaseModel, PrivateAttr
+from pydantic import BaseModel, PrivateAttr, model_validator
 
 from tenrec.installer import Installer
-from tenrec.plugins.plugin_loader import load_plugins
+from tenrec.plugins.plugin_loader import load_plugins, LoadedPlugin
 from loguru import logger
 
-from tenrec.utils import config_path
-
-
-class Plugin(BaseModel):
-    name: str
-    description: str | None = None
-    version: str
-    location: str
-    git: str | None = None
+from tenrec.utils import config_path, console
 
 
 class Config(BaseModel):
-    plugins: List[Plugin] = []
+    """Configuration for tenrec, including installed plugins.
 
-    # --- internal snapshot of initial/last-saved state ---
-    _snapshot: Dict[str, dict] = PrivateAttr(default_factory=dict)
+    The config file works by providing an abstraction layer between what's stored on disk, and
+    loaded in memory. The `plugins` field is a list of `LoadedPlugin` objects, which include
+    the actual plugin instance loaded from the specified location. The `Plugin` model is used
+    for serialization/deserialization to/from JSON.
+    """
 
-    def model_post_init(self, __context) -> None:
-        self._snapshot = self._fingerprint()
+    plugins: Dict[str, LoadedPlugin] = dict()
+    load_failures: Dict[str, dict] = dict()
+    load_failures_exist: bool = False
+    _snapshot: "Config | None" = PrivateAttr(default_factory=lambda: None)
+
+    """
+    Client properties and methods
+    --------------------------
+    These are used by the client to load/save the config, and manage plugins.
+    The `load_config` method will attempt to load the config from disk, and if it doesn't exist,
+    it will create a default config file. If any plugins fail to load, the user will be prompted
+    to remove them from the config. If the user chooses not to remove them, they will remain in the config
+    and be attempted to be loaded again on the next run.
+    
+    The `save_config` method will save the config to disk, and if there are any changes to the plugins,
+    it will trigger the installer to re-run to update any auto-approve tools.
+    
+    The `add_plugins` and `remove_plugins` methods are used to manage the list of plugins in the config.
+    """
 
     @classmethod
     def load_config(cls) -> "Config":
         cfg_file = config_path()
         if cfg_file.exists() and cfg_file.is_file():
+            # `load_plugins_validator` will be called automatically
             obj = cls.model_validate_json(cfg_file.read_text(encoding="utf-8"))
         else:
+            # Create a default config file
             cfg_file.parent.mkdir(parents=True, exist_ok=True)
-            obj = cls()
+            obj = cls(plugins={})
             cfg_file.write_text(obj.model_dump_json(indent=2), encoding="utf-8")
-        # ensure snapshot matches what we loaded/wrote
-        obj._snapshot = obj._fingerprint()
         return obj
+
+    def save_config(self) -> None:
+        added, removed, updated = self._diff()
+        if added or removed or updated:
+            self._on_change(added, removed, updated)
+        self.config_path.write_text(json.dumps(self.model_dump(), indent=2), encoding="utf-8")
+        self._snapshot = self._fingerprint()
+
+    def add_plugins(self, plugins: list[str]) -> int:
+        loaded, errors = load_plugins(plugins)
+        if len(errors) != 0:
+            return len(errors)
+
+        added = 0
+        for name, plugin in loaded.items():
+            if name in self.plugins:
+                logger.warning("Plugin with name '{}' already exists, skipping.", name)
+                continue
+            self.plugins[name] = plugin
+            added += 1
+        return added
+
+    def remove_plugins(self, names: list[str]) -> int:
+        removed = 0
+        for name in names:
+            if name not in self.plugins:
+                logger.warning("Plugin with name '{}' does not exist, skipping.", name)
+                continue
+            del self.plugins[name]
+            removed += 1
+            logger.success("Removed plugin: [dim]{}[/]", name)
+        return removed
 
     @property
     def config_path(self) -> Path:
@@ -47,63 +92,117 @@ class Config(BaseModel):
 
     @property
     def plugin_paths(self) -> list[str]:
-        return [p.location for p in self.plugins]
+        return [str(p.location) for p in self.plugins.values()]
 
-    # --- helpers: fingerprint + diff ---
-    def _fingerprint(self) -> Dict[str, dict]:
+    """
+    Change detection logic
+    --------------------------
+    We want to detect when the config has changed in a meaningful way, so we can trigger
+    actions like re-running the installer to update auto-approve tools.
+    """
+
+    @staticmethod
+    def _compare_plugins(p1: LoadedPlugin, p2: LoadedPlugin) -> bool:
+        return p1.model_dump() == p2.model_dump()
+
+    def _fingerprint(self) -> "Config":
         """
         Create a stable, comparable representation of the config.
         We key plugins by name and dump their fields (excluding Nones).
         """
-        fp: Dict[str, dict] = {}
-        for p in self.plugins:
-            fp[p.name] = p.model_dump(exclude_none=True)
-        return fp
+        return deepcopy(self)
 
-    def _diff(self) -> Tuple[List[Plugin], List[Plugin], List[Tuple[Plugin, Plugin]]]:
-        """
-        Returns (added, removed, updated) where:
-          - added: plugins present now but not in snapshot
-          - removed: plugins present in snapshot but not now
-          - updated: (old, new) pairs where fields changed
-        """
-        current = self._fingerprint()
+    def _diff(self) -> Tuple[List[LoadedPlugin], List[LoadedPlugin], List[Tuple[LoadedPlugin, LoadedPlugin]]]:
+        current = self._fingerprint().plugins
         prev = self._snapshot
+        if prev is None:
+            return list(current.values()), [], []
+        prev = prev.plugins
 
         added_names = current.keys() - prev.keys()
         removed_names = prev.keys() - current.keys()
         common = current.keys() & prev.keys()
 
-        added = [Plugin(**current[n]) for n in sorted(added_names)]
-        removed = [Plugin(**prev[n]) for n in sorted(removed_names)]
+        added = [current[n] for n in sorted(added_names)]
+        removed = [prev[n] for n in sorted(removed_names)]
+        updated: List[Tuple[LoadedPlugin, LoadedPlugin]] = []
 
-        updated: List[Tuple[Plugin, Plugin]] = []
         for n in sorted(common):
-            if current[n] != prev[n]:
-                updated.append((Plugin(**prev[n]), Plugin(**current[n])))
-
+            if self._compare_plugins(prev[n], current[n]):
+                continue
+            updated.append((prev[n], current[n]))
+        logger.debug("Config diff - added: {}, removed: {}, updated: {}", len(added), len(removed), len(updated))
         return added, removed, updated
 
     def _on_change(
         self,
-        added: List[Plugin],
-        removed: List[Plugin],
-        updated: List[Tuple[Plugin, Plugin]],
+        added: List[LoadedPlugin],
+        removed: List[LoadedPlugin],
+        updated: List[Tuple[LoadedPlugin, LoadedPlugin]],
     ) -> None:
-        """
-        Place extra processing here. Examples:
-          - clone/pull git plugins when added/updated
-          - purge plugin directories when removed
-          - trigger in-memory reloads, cache busts, etc.
-        """
-        if len(added) != 0 or len(removed) != 0 or len(updated) != 0:
-            plugins = load_plugins(paths=self.plugin_paths)
-            logger.info("Detected changes to plugins, running installer to update auto-approve tools")
-            Installer(plugins=[p.plugin for p in plugins]).install()
+        _ = added, removed, updated
+        self._run_installer()
 
-    def save_config(self) -> None:
-        added, removed, updated = self._diff()
-        if added or removed or updated:
-            self._on_change(added, removed, updated)
-        self.config_path.write_text(self.model_dump_json(indent=2), encoding="utf-8")
+    def _run_installer(self) -> None:
+        logger.info("Running installer to update auto-approve tools")
+        Installer(plugins=[p.plugin for p in self.plugins.values()]).install()
+
+    """
+    Pydantic model methods
+    --------------------------
+    These are used by pydantic to serialize/deserialize the config to/from JSON.
+    """
+
+    def model_dump(self, **kwargs) -> dict[str, Any]:
+        result = {}
+
+        def _dump_plugins(plugin_dict: Dict[str, LoadedPlugin]) -> Dict[str, dict]:
+            return {name: p.model_dump() for name, p in plugin_dict.items()}
+
+        plugins = _dump_plugins(self.plugins)
+        result["plugins"] = plugins | self.load_failures
+        return result
+
+    def model_post_init(self, __context) -> None:
         self._snapshot = self._fingerprint()
+
+    @model_validator(mode="before")
+    def load_plugins_validator(cls, values: dict) -> dict:
+        stored_plugins = values.get("plugins", None)
+
+        if stored_plugins is None or not isinstance(stored_plugins, dict):
+            raise ValueError("Config is improperly formatted: 'plugins' must be a dict")
+        if not all(p.get("location") for p in stored_plugins.values()):
+            raise ValueError("Config is improperly formatted: 'plugins' must be all contain 'location'")
+
+        values["plugins"], load_failures = load_plugins(paths=[p["location"] for p in stored_plugins.values()])
+        values["load_failures"] = {}
+
+        num_fail = len(load_failures)
+        if num_fail == 0:
+            return values
+
+        values["load_failures_exist"] = True
+
+        plural = "" if num_fail == 1 else "s"
+        msg = f"[red]{num_fail} plugin{plural} failed to load[/], would you like to remove them from the config? (y/N) "
+        choice = console.input(msg).lower()
+        if choice == "y":
+            return values
+        logger.info("Fair enough! They'll remain in your config.")
+        # I know... I know... O(n^2) but the lists should be small
+        for k, v in stored_plugins.items():
+            for load_failure in load_failures:
+                if load_failure == v["location"]:
+                    logger.debug("Keeping plugin: [dim]{}[/]", k)
+                    values["load_failures"][k] = v
+                    break
+        return values
+
+    @model_validator(mode="after")
+    def validate_load_failure_purge(self) -> "Config":
+        if len(self.load_failures) == 0 and self.load_failures_exist:
+            self.save_config()
+            # Forced to re-run installer if any plugins were removed
+            self._run_installer()
+        return self

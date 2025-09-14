@@ -1,7 +1,4 @@
 import re
-from collections.abc import Callable
-from functools import wraps
-from typing import Any
 
 from tenrec.plugins.models import (
     HexEA,
@@ -12,42 +9,6 @@ from tenrec.plugins.models import (
     StringData,
     operation,
 )
-
-
-def string_op(iterator: bool = False) -> Callable:
-    """Decorator for string operations that prepares the string cache.
-
-    Ensures database is open and builds the string list before method execution.
-
-    :param iterator: If True, method returns iterator and should not be paginated.
-    :return: Decorated function with string list prepared.
-    """
-
-    def parent_wrapper(func):  # noqa: ANN001, ANN202
-        def handler(self, *args: tuple[Any, ...], **kwargs: dict[str, Any]):  # noqa: ANN001, ANN202
-            db = self.database
-            if not db.is_open():
-                msg = f"Database {self} is not open"
-                raise RuntimeError(msg)
-            db.strings.build_string_list()
-            return func(self, *args, **kwargs)
-
-        if iterator:
-
-            @wraps(func)
-            @operation()
-            def wrapper(self, *args: tuple[Any, ...], **kwargs: dict[str, Any]):  # noqa: ANN001, ANN202
-                return handler(self, *args, **kwargs)
-        else:
-
-            @wraps(func)
-            @operation(options=[PaginatedParameter()])
-            def wrapper(self, *args: tuple[Any, ...], **kwargs: dict[str, Any]):  # noqa: ANN001, ANN202
-                return handler(self, *args, **kwargs)
-
-        return wrapper
-
-    return parent_wrapper
 
 
 class StringsPlugin(PluginBase):
@@ -75,7 +36,7 @@ class StringsPlugin(PluginBase):
         ],
     )
 
-    @string_op(iterator=True)
+    @operation(options=[PaginatedParameter()])
     def get_all(self) -> list[StringData]:
         """Get all strings extracted from the binary.
 
@@ -83,7 +44,7 @@ class StringsPlugin(PluginBase):
         """
         return list(map(StringData.from_ida, list(self.database.strings.get_all())))
 
-    @string_op(iterator=True)
+    @operation(options=[PaginatedParameter()])
     def get_all_filtered(self, search: str) -> list[StringData]:
         """Search for strings matching a regex pattern.
 
@@ -96,7 +57,7 @@ class StringsPlugin(PluginBase):
                 result.append(StringData.from_ida(s))
         return result
 
-    @string_op()
+    @operation()
     def get_at_address(self, address: HexEA) -> StringData:
         """Get detailed string information at a specific address.
 
@@ -110,7 +71,7 @@ class StringsPlugin(PluginBase):
             raise OperationError(msg)
         return StringData.from_ida(result)
 
-    @string_op()
+    @operation()
     def get_at_index(self, index: int) -> StringData:
         """Get string by its index in the string list.
 
@@ -124,7 +85,7 @@ class StringsPlugin(PluginBase):
             raise OperationError(msg)
         return StringData.from_ida(result)
 
-    @string_op(iterator=True)
+    @operation(options=[PaginatedParameter()])
     def get_between(self, start: HexEA, end: HexEA) -> list[StringData]:
         """Get all strings within an address range.
 

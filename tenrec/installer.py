@@ -69,6 +69,7 @@ class Installer:
             plugins = []
         plugins = DEFAULT_PLUGINS + plugins
         self.server = Server(plugins=plugins)
+        self.safe_functions = self._get_safe_functions()
 
     def install(self) -> None:
         successful_installs = []
@@ -92,7 +93,6 @@ class Installer:
 
     def _generate_config(self) -> dict:
         env = get_environment()
-        safe_functions = self._get_safe_functions()
         return {
             "command": "uvx",
             "args": ["tenrec", "run"],
@@ -101,8 +101,8 @@ class Installer:
             },
             "timeout": 1800,
             "disabled": False,
-            "autoApprove": safe_functions,
-            "alwaysAllow": safe_functions,
+            "autoApprove": self.safe_functions,
+            "alwaysAllow": self.safe_functions,
         }
 
     def _get_safe_functions(self) -> list[str]:

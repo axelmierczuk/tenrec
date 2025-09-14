@@ -74,10 +74,11 @@ class Server(PluginBase):
         # Initialize MCP server
         self.mcp = FastMCP(self.name, instructions=self.plugin_manager.instructions)
 
-        self.plugin_manager.register_plugins(self.mcp)
-        logger.info("Registered {} tools for {} plugins", self.plugin_manager.tools_registered, len(plugins))
+        logger.info("Registered {} plugins", len(plugins))
 
     def run(self, **transport_kwargs: Any) -> None:
+        self.plugin_manager.register_plugins(self.mcp)
+        logger.info("Registered {} tools", self.plugin_manager.tools_registered)
         self.mcp.run(transport=self._transport, **transport_kwargs)
 
     @operation()

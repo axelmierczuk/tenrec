@@ -5,6 +5,7 @@ from fastmcp.server.server import Transport
 from loguru import logger
 
 from tenrec.options import PostGroup, docs_options, plugin_options, run_options
+from tenrec.plugins.plugin_loader import LoadedPlugin
 from tenrec.utils import console
 
 
@@ -44,85 +45,38 @@ def plugin_manager() -> None:
 @plugin_manager.command("list")
 def list_plugins() -> None:
     """List installed plugins."""
-    from tenrec.config import Config, Plugin  # noqa: PLC0415
-    from tenrec.plugins.plugin_loader import load_plugins  # noqa: PLC0415
+    from tenrec.config import Config  # noqa: PLC0415
 
     config = Config.load_config()
-    loaded_plugins = load_plugins(config.plugin_paths)
-
-    if len(loaded_plugins) == 0:
+    if len(config.plugins) == 0:
         logger.warning("No plugins found!")
         logger.warning('To get started, add a plugin with "[green]tenrec plugins add[/]".')
         return
 
-    load_fails: list[Plugin] = []
-    for i, plugin in enumerate(config.plugins):
-        if plugin.location not in config.plugin_paths:
-            load_fails.append(plugin)
-            continue
-        console.print(f"[green]{plugin.name} ({plugin.version})[/]")
-        console.print(f"  [dim]Description:[/] {plugin.description}")
+    for name, plugin in config.plugins.items():
+        console.print(f"[green]{name} ({plugin.plugin.version})[/]")
+        console.print(f"  [dim]Description:[/] {plugin.plugin.__doc__}")
         console.print(f"  [dim]Location:[/] {plugin.location}", highlight=False)
-        if plugin.git:
+        if plugin.git is not None:
             console.print(f"  [dim]Repo:[/] {plugin.git}", highlight=False)
-    if len(load_fails) == 0:
-        return
-
-    logger.error("Could not load plugin(s) at the following locations:")
-    missing_locations = []
-    for missing in load_fails:
-        missing_locations.append(missing.location)
-        logger.error("  [dim]{}[/]", missing.location)
-    logger.warning("Would you like to remove them from your config? (y/N) ")
-    choice = input().lower()
-    if choice == "y":
-        config.plugins = [f for f in config.plugins if f.location not in missing_locations]
-        config.save_config()
-        logger.success("Removed missing plugins from config.")
-    else:
-        logger.info("Fair enough! They'll remain in your config.")
 
 
 @plugin_manager.command("add")
 @plugin_options(required=True)
 def add_plugin(plugin: tuple) -> None:
     """Add a new plugin."""
-    from tenrec.config import Config, Plugin  # noqa: PLC0415
-    from tenrec.plugins.plugin_loader import load_plugins  # noqa: PLC0415
+    from tenrec.config import Config  # noqa: PLC0415
 
     plugin = list(plugin)
     if len(plugin) == 0:
         logger.error("No plugin paths provided!")
         return
-    plugins = load_plugins(plugin)
-    if len(plugins) == 0:
-        logger.error("No valid plugins found at the provided paths!")
-        return
+
     config = Config.load_config()
-    added = 0
-    for p in plugins:
-        path_str = str(p.path)
-        if path_str in config.plugin_paths:
-            remove_index = -1
-            for i, cp in enumerate(config.plugins):
-                if cp.location == path_str:
-                    remove_index = i
-                    break
-            if remove_index != -1:
-                logger.warning("Plugin [dim]{}[/] already exists in config, updating entry.", p.plugin.name)
-                del config.plugins[remove_index]
-
-        config_plugin = Plugin(
-            name=p.plugin.name,
-            description=p.plugin.__doc__,
-            version=p.plugin.version,
-            location=path_str,
-            git=p.git,
-        )
-        logger.success("Adding plugin [dim]{}[/] from file [dim]{}[/]", p.plugin.name, p.path)
-        config.plugins.append(config_plugin)
-        added += 1
-
+    added = config.add_plugins(plugin)
+    if added == 0:
+        logger.warning("No new plugins were added to the config.")
+        return
     config.save_config()
     logger.success("Added {} plugin(s) added successfully!", added)
 
@@ -147,18 +101,11 @@ def remove_plugin(name: tuple) -> None:
         return
 
     config = Config.load_config()
-    initial = set(config.plugin_paths)
-    config.plugins = [f for f in config.plugins if f.name not in plugin]
-    removed = initial - set(config.plugin_paths)
-
-    if len(removed) == 0:
+    removed = config.remove_plugins(plugin)
+    if removed == 0:
         logger.warning("No matching plugins found to remove!")
         return
-
-    for f in removed:
-        logger.success("Removed plugin: [dim]{}[/]", f)
     config.save_config()
-    logger.success("Plugin(s) removed successfully!")
 
 
 @cli.command()
@@ -185,25 +132,23 @@ def run(
         return
 
     if custom_plugins:
-        loaded = load_plugins(plugin)
-        plugins = [p.plugin for p in loaded]
+        loaded, _ = load_plugins(plugin)
         logger.debug("Loaded plugins: ")
-        for p in loaded:
+        for p in loaded.values():
+            plugins.append(p.plugin)
             logger.debug("  [dim]{}[/]", p.path)
     if not no_default_plugins:
         logger.debug("Loading default plugins")
         plugins.extend(DEFAULT_PLUGINS)
     if not no_config:
         config_data = Config.load_config()
-        if len(config_data.plugin_paths) == 0:
-            logger.warning("No plugins found in config to load.")
+        if len(config_data.plugins) == 0:
+            logger.warning("No plugins found in the config.")
         else:
-            logger.debug("Loading plugins from config")
-            loaded = load_plugins(config_data.plugin_paths)
-            plugins.extend([p.plugin for p in loaded])
-            logger.debug("Loaded plugins: ")
-            for p in loaded:
-                logger.debug("  [dim]{}[/]", p.path)
+            logger.debug("Getting config plugins")
+            for p in config_data.plugins.values():
+                plugins.append(p.plugin)
+                logger.debug("  [dim]{}[/]", p.location)
     if len(plugins) == 0:
         logger.warning("Weird, no plugins found to run. Continuing anyway...")
 
@@ -221,21 +166,22 @@ def docs(name: str, repo: str, readme: str, plugin: tuple, output: str, base_pat
     from tenrec.server import Server  # noqa: PLC0415
 
     plugin_path = list(plugin)
-
-    logger.debug("Attempting to load plugins from:")
-    for p in plugin_path:
-        logger.debug("  [dim]{}[/]", p)
-    plugins = load_plugins(plugin_path)
-    logger.debug("Found {} plugins", len(plugins))
+    plugins, load_failures = load_plugins(plugin_path)
     if len(plugins) == 0:
         logger.error("No plugins found to document!")
         return
 
+    logger.debug("Found {} plugins", len(plugins))
     logger.debug("Loaded plugins: ")
-    for p in plugins:
-        logger.debug("  [dim]{}[/]", p.path)
+
+    plugin_instances = []
+    for p in plugins.values():
+        plugin_instances.append(p.plugin)
+        logger.debug("  [dim]{}[/]", p.location)
+
     logger.info("Generating documentation")
-    server = Server(plugins=[p.plugin for p in plugins])
+
+    server = Server(plugins=plugin_instances)
     doc = DocumentationGenerator(
         server,
         name=name,

@@ -1,9 +1,10 @@
 import importlib
 import importlib.util
+import json
 import shutil
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import giturlparse
 from git import Repo
@@ -20,22 +21,49 @@ PLUGIN_VAR = "plugin"
 class LoadedPlugin(BaseModel):
     """Represents a loaded plugin."""
 
-    path: Path
+    name: str
+    description: str | None = None
+    version: str
+    location: Path
     git: str | None = None
     plugin: PluginBase
+
+    def model_dump_json(self, **kwargs: Any) -> str:
+        return json.dumps(self.model_dump(**kwargs), indent=2)
+
+    def model_dump(self, **kwargs: Any) -> dict:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "version": self.version,
+            "location": str(self.location),
+            "git": self.git,
+        }
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-def load_plugins(paths: list) -> list[LoadedPlugin]:
+def load_plugins(paths: list) -> tuple[dict[str, LoadedPlugin], list[str]]:
     """Load plugins from the given paths."""
-    plugins = []
+    plugins = {}
+    load_failures = []
 
     for plugin in list(paths):
-        objs = _load(plugin)
-        if all(isinstance(p.plugin, PluginBase) for p in objs):
-            plugins.extend(objs)
+        for obj in _load(plugin):
+            if obj is None:
+                load_failures.append(plugin)
+                continue
 
-    return plugins
+            if not isinstance(obj.plugin, PluginBase):
+                load_failures.append(plugin)
+                continue
+
+            if obj.plugin.name in plugins:
+                logger.warning("Plugin with name '{}' already loaded, skipping duplicate.", obj.plugin.name)
+                continue
+            plugins[obj.plugin.name] = obj
+
+    return plugins, load_failures
 
 
 def _parse_github_url(url: GitUrlParsed, plugin_string: str) -> tuple[Path, bool]:
@@ -59,9 +87,7 @@ def _parse_github_url(url: GitUrlParsed, plugin_string: str) -> tuple[Path, bool
     def _should_clone(p: Path) -> bool:
         if p.exists():
             logger.warning("The path to the plugin already exists!")
-            choice = console.input(
-                PREFIX["WARNING"] + f" Would you like to re-clone [dim]{url.name}[/]? (y/N): "
-            ).lower()
+            choice = console.input(f"Would you like to re-clone [dim]{url.name}[/]? (y/N): ").lower()
             if choice != "y":
                 logger.info("Got it! Skipping re-clone.")
                 return False
@@ -83,7 +109,9 @@ def _parse_github_url(url: GitUrlParsed, plugin_string: str) -> tuple[Path, bool
             path = path / subdir
             if not path.exists() or not path.is_dir():
                 logger.error(
-                    "Subdirectory [dim]{}[/] does not exist in the repository [dim]{}[/]", subdir, plugin_string
+                    "Subdirectory [dim]{}[/] does not exist in the repository [dim]{}[/]",
+                    subdir,
+                    plugin_string,
                 )
                 success = False
     except Exception as e:
@@ -92,19 +120,21 @@ def _parse_github_url(url: GitUrlParsed, plugin_string: str) -> tuple[Path, bool
     return path, success
 
 
-def _load(plugin_string: str) -> list[LoadedPlugin]:
+def _load(plugin_string: str) -> Iterator[LoadedPlugin | None]:
     """Load and return the plugin."""
     parsed = giturlparse.parse(plugin_string)
     if parsed.valid:
         logger.info("Cloning plugin from git repository: [dim]{}[/]", plugin_string)
         path, success = _parse_github_url(parsed, plugin_string)
         if not success:
-            return []
+            yield None
+            return
     else:
         path = Path(plugin_string)
         if not path.exists(follow_symlinks=True):
             logger.error("Plugin path does not exist: [dim]{}[/]", plugin_string)
-            return []
+            yield None
+            return
 
     def _load_helper(load_path: Path) -> LoadedPlugin | None:
         if _is_file_path(load_path):
@@ -112,7 +142,7 @@ def _load(plugin_string: str) -> list[LoadedPlugin]:
                 p = _load_from_file(load_path)
                 if not p:
                     return None
-                res = LoadedPlugin(path=load_path, plugin=p)
+                res = LoadedPlugin(name=p.name, description=p.__doc__, version=p.version, location=load_path, plugin=p)
                 if parsed.valid:
                     res.git = plugin_string
                 return res
@@ -121,23 +151,17 @@ def _load(plugin_string: str) -> list[LoadedPlugin]:
                 return None
         return None
 
+    logger.debug("Loading plugin from path: {}", path)
     if path.is_file():
         result = _load_helper(path)
-        if result:
-            return [result]
-        return []
-
-    if path.is_dir():
-        loaded = []
+        yield result
+    elif path.is_dir():
         for file in path.glob("*.py"):
             result = _load_helper(file)
-            logger.debug("Loaded plugin from file: {}", file)
-            if result:
-                loaded.append(result)
-        return loaded
-
-    msg = f"Invalid plugin path: {plugin_string}"
-    raise ValueError(msg)
+            yield result
+    else:
+        msg = f"Invalid plugin path: {plugin_string}"
+        raise ValueError(msg)
 
 
 def _is_file_path(module: Path) -> bool:
