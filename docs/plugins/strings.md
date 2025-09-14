@@ -26,9 +26,16 @@ Extract and analyze string literals in the binary. Use for finding hardcoded val
 ### strings_get_all
 
 ```function
-def strings_get_all() -> list[tenrec.plugins.models.ida.StringData]:
+def strings_get_all(
+    offset: int = 0,
+    limit: int = 100
+) -> list[tenrec.plugins.models.ida.StringData]:
 ```
 Get all strings extracted from the binary.
+
+**Args:**
+- **<span class='parameter'>offset</span>** (**<span class='return-type'>int</span>**)
+- **<span class='parameter'>limit</span>** (**<span class='return-type'>int</span>**)
 
 **Returns:**
 - **<span class='return-type'>list[tenrec.plugins.models.ida.StringData]</span>**: List of StringInfo objects for all identified strings.
@@ -38,13 +45,17 @@ Get all strings extracted from the binary.
 
 ```function
 def strings_get_all_filtered(
-    search: str
+    search: str,
+    offset: int = 0,
+    limit: int = 100
 ) -> list[tenrec.plugins.models.ida.StringData]:
 ```
 Search for strings matching a regex pattern.
 
 **Args:**
 - **<span class='parameter'>search</span>** (**<span class='return-type'>str</span>**): Regular expression pattern to match string content.
+- **<span class='parameter'>offset</span>** (**<span class='return-type'>int</span>**)
+- **<span class='parameter'>limit</span>** (**<span class='return-type'>int</span>**)
 
 **Returns:**
 - **<span class='return-type'>list[tenrec.plugins.models.ida.StringData]</span>**: List of StringInfo objects for strings matching the pattern.
@@ -53,18 +64,12 @@ Search for strings matching a regex pattern.
 ### strings_get_at_address
 
 ```function
-def strings_get_at_address(
-    address: HexEA,
-    offset: int = 0,
-    limit: int = 100
-) -> StringData:
+def strings_get_at_address(address: tenrec.plugins.models.ida.HexEA) -> StringData:
 ```
 Get detailed string information at a specific address.
 
 **Args:**
 - **<span class='parameter'>address</span>** (**<span class='return-type'>HexEA</span>**): Address where the string is located.
-- **<span class='parameter'>offset</span>** (**<span class='return-type'>int</span>**)
-- **<span class='parameter'>limit</span>** (**<span class='return-type'>int</span>**)
 
 **Returns:**
 - **<span class='return-type'>StringData</span>**: StringInfo object with string content, type, and length.
@@ -73,18 +78,12 @@ Get detailed string information at a specific address.
 ### strings_get_at_index
 
 ```function
-def strings_get_at_index(
-    index: int,
-    offset: int = 0,
-    limit: int = 100
-) -> StringData:
+def strings_get_at_index(index: int) -> StringData:
 ```
 Get string by its index in the string list.
 
 **Args:**
 - **<span class='parameter'>index</span>** (**<span class='return-type'>int</span>**): Zero-based index in the sorted string list.
-- **<span class='parameter'>offset</span>** (**<span class='return-type'>int</span>**)
-- **<span class='parameter'>limit</span>** (**<span class='return-type'>int</span>**)
 
 **Returns:**
 - **<span class='return-type'>StringData</span>**: StringInfo object for the string at this index.
@@ -95,7 +94,9 @@ Get string by its index in the string list.
 ```function
 def strings_get_between(
     start: HexEA,
-    end: HexEA
+    end: HexEA,
+    offset: int = 0,
+    limit: int = 100
 ) -> list[tenrec.plugins.models.ida.StringData]:
 ```
 Get all strings within an address range.
@@ -103,6 +104,8 @@ Get all strings within an address range.
 **Args:**
 - **<span class='parameter'>start</span>** (**<span class='return-type'>HexEA</span>**): Start address (inclusive).
 - **<span class='parameter'>end</span>** (**<span class='return-type'>HexEA</span>**): End address (exclusive).
+- **<span class='parameter'>offset</span>** (**<span class='return-type'>int</span>**)
+- **<span class='parameter'>limit</span>** (**<span class='return-type'>int</span>**)
 
 **Returns:**
 - **<span class='return-type'>list[tenrec.plugins.models.ida.StringData]</span>**: List of StringInfo objects for strings in the range.
