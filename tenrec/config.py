@@ -1,14 +1,13 @@
 import json
 from copy import deepcopy
 from pathlib import Path
-from typing import Dict, Tuple, List, Any
+from typing import Any
 
+from loguru import logger
 from pydantic import BaseModel, PrivateAttr, model_validator
 
 from tenrec.installer import Installer
-from tenrec.plugins.plugin_loader import load_plugins, LoadedPlugin
-from loguru import logger
-
+from tenrec.plugins.plugin_loader import LoadedPlugin, load_plugins
 from tenrec.utils import config_path, console
 
 
@@ -21,8 +20,8 @@ class Config(BaseModel):
     for serialization/deserialization to/from JSON.
     """
 
-    plugins: Dict[str, LoadedPlugin] = dict()
-    load_failures: Dict[str, dict] = dict()
+    plugins: dict[str, LoadedPlugin] = {}
+    load_failures: dict[str, dict] = {}
     load_failures_exist: bool = False
     _snapshot: "Config | None" = PrivateAttr(default_factory=lambda: None)
 
@@ -34,10 +33,10 @@ class Config(BaseModel):
     it will create a default config file. If any plugins fail to load, the user will be prompted
     to remove them from the config. If the user chooses not to remove them, they will remain in the config
     and be attempted to be loaded again on the next run.
-    
+
     The `save_config` method will save the config to disk, and if there are any changes to the plugins,
     it will trigger the installer to re-run to update any auto-approve tools.
-    
+
     The `add_plugins` and `remove_plugins` methods are used to manage the list of plugins in the config.
     """
 
@@ -106,13 +105,13 @@ class Config(BaseModel):
         return p1.model_dump() == p2.model_dump()
 
     def _fingerprint(self) -> "Config":
-        """
-        Create a stable, comparable representation of the config.
+        """Create a stable, comparable representation of the config.
+
         We key plugins by name and dump their fields (excluding Nones).
         """
         return deepcopy(self)
 
-    def _diff(self) -> Tuple[List[LoadedPlugin], List[LoadedPlugin], List[Tuple[LoadedPlugin, LoadedPlugin]]]:
+    def _diff(self) -> tuple[list[LoadedPlugin], list[LoadedPlugin], list[tuple[LoadedPlugin, LoadedPlugin]]]:
         current = self._fingerprint().plugins
         prev = self._snapshot
         if prev is None:
@@ -125,7 +124,7 @@ class Config(BaseModel):
 
         added = [current[n] for n in sorted(added_names)]
         removed = [prev[n] for n in sorted(removed_names)]
-        updated: List[Tuple[LoadedPlugin, LoadedPlugin]] = []
+        updated: list[tuple[LoadedPlugin, LoadedPlugin]] = []
 
         for n in sorted(common):
             if self._compare_plugins(prev[n], current[n]):
@@ -136,9 +135,9 @@ class Config(BaseModel):
 
     def _on_change(
         self,
-        added: List[LoadedPlugin],
-        removed: List[LoadedPlugin],
-        updated: List[Tuple[LoadedPlugin, LoadedPlugin]],
+        added: list[LoadedPlugin],
+        removed: list[LoadedPlugin],
+        updated: list[tuple[LoadedPlugin, LoadedPlugin]],
     ) -> None:
         _ = added, removed, updated
         self._run_installer()
@@ -153,27 +152,29 @@ class Config(BaseModel):
     These are used by pydantic to serialize/deserialize the config to/from JSON.
     """
 
-    def model_dump(self, **kwargs) -> dict[str, Any]:
+    def model_dump(self, **kwargs: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG002
         result = {}
 
-        def _dump_plugins(plugin_dict: Dict[str, LoadedPlugin]) -> Dict[str, dict]:
+        def _dump_plugins(plugin_dict: dict[str, LoadedPlugin]) -> dict[str, dict]:
             return {name: p.model_dump() for name, p in plugin_dict.items()}
 
         plugins = _dump_plugins(self.plugins)
         result["plugins"] = plugins | self.load_failures
         return result
 
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, __context) -> None:  # noqa: ANN001, PYI063
         self._snapshot = self._fingerprint()
 
     @model_validator(mode="before")
-    def load_plugins_validator(cls, values: dict) -> dict:
-        stored_plugins = values.get("plugins", None)
+    def load_plugins_validator(cls, values: dict) -> dict:  # noqa: N805
+        stored_plugins = values.get("plugins")
 
         if stored_plugins is None or not isinstance(stored_plugins, dict):
-            raise ValueError("Config is improperly formatted: 'plugins' must be a dict")
+            msg = "Config is improperly formatted: 'plugins' must be a dict"
+            raise ValueError(msg)
         if not all(p.get("location") for p in stored_plugins.values()):
-            raise ValueError("Config is improperly formatted: 'plugins' must be all contain 'location'")
+            msg = "Config is improperly formatted: 'plugins' must be all contain 'location'"
+            raise ValueError(msg)
 
         values["plugins"], load_failures = load_plugins(paths=[p["location"] for p in stored_plugins.values()])
         values["load_failures"] = {}

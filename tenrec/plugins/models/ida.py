@@ -272,7 +272,7 @@ class FunctionData(BaseModel):
 
     @classmethod
     def from_func_t(cls, func: func_t) -> "FunctionData | None":
-        if not func:
+        if func is None:
             return None
         if not func.name:
             return cls(start_ea=HexEA(func.start_ea), end_ea=HexEA(func.end_ea))

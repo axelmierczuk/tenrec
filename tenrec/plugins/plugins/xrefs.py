@@ -6,6 +6,7 @@ from tenrec.plugins.models import (
     FunctionData,
     HexEA,
     Instructions,
+    OperationError,
     PaginatedParameter,
     PluginBase,
     XrefData,
@@ -107,6 +108,10 @@ class XrefsPlugin(PluginBase):
         :return: A dictionary representing the call graph.
         """
         func = self.database.functions.get_at(function_address.ea_t)
+        if func is None:
+            msg = f"No function found at address: {function_address}"
+            raise OperationError(msg)
+
         func = FunctionData.from_func_t(func)
         return self.call_graph_helper(
             func, graph={}, current_depth=0, max_depth=depth, direction=direction, flags=flags
@@ -157,6 +162,8 @@ class XrefsPlugin(PluginBase):
                     raise ValueError(msg)
 
                 callee_func = self.database.functions.get_at(func_ref)
+                if not callee_func:
+                    continue
                 callee_func_data = FunctionData.from_func_t(callee_func)
 
                 if not callee_func:

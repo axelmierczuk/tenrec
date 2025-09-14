@@ -3,8 +3,9 @@ import importlib.util
 import json
 import shutil
 import sys
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import giturlparse
 from git import Repo
@@ -13,7 +14,8 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
 from tenrec.plugins.models import PluginBase
-from tenrec.utils import PREFIX, console, plugin_path
+from tenrec.utils import console, plugin_path
+
 
 PLUGIN_VAR = "plugin"
 
@@ -31,7 +33,7 @@ class LoadedPlugin(BaseModel):
     def model_dump_json(self, **kwargs: Any) -> str:
         return json.dumps(self.model_dump(**kwargs), indent=2)
 
-    def model_dump(self, **kwargs: Any) -> dict:
+    def model_dump(self, **kwargs: Any) -> dict:  # noqa: ARG002
         return {
             "name": self.name,
             "description": self.description,
@@ -137,6 +139,7 @@ def _load(plugin_string: str) -> Iterator[LoadedPlugin | None]:
             return
 
     def _load_helper(load_path: Path) -> LoadedPlugin | None:
+        res = None
         if _is_file_path(load_path):
             try:
                 p = _load_from_file(load_path)
@@ -145,11 +148,9 @@ def _load(plugin_string: str) -> Iterator[LoadedPlugin | None]:
                 res = LoadedPlugin(name=p.name, description=p.__doc__, version=p.version, location=load_path, plugin=p)
                 if parsed.valid:
                     res.git = plugin_string
-                return res
             except (ImportError, FileNotFoundError, AttributeError) as e:
                 logger.error("Failed to load plugin from file [dim]{}[/]:\n\t[red]{}[/]", load_path, e)
-                return None
-        return None
+        return res
 
     logger.debug("Loading plugin from path: {}", path)
     if path.is_file():
@@ -181,7 +182,8 @@ def _load_from_file(path: Path) -> "PluginBase":
     # Skip package initializers as plugins
     if path.name == "__init__.py":
         logger.debug("Skipping package initializer: {}", path)
-        raise ImportError(f"Not a plugin module (package initializer): {path}")
+        msg = f"Not a plugin module (package initializer): {path}"
+        raise ImportError(msg)
 
     # Walk up while __init__.py exists to collect package parts (inner -> outer)
     pkg_parts: list[str] = []

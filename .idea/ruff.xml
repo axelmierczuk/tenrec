@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="RuffConfigService">
+    <option name="alwaysUseGlobalRuff" value="true" />
     <option name="globalRuffExecutablePath" value="$USER_HOME$/.local/bin/ruff" />
+    <option name="runRuffOnSave" value="true" />
+    <option name="useRuffImportOptimizer" value="true" />
+    <option name="useRuffServer" value="true" />
   </component>
 </project>
