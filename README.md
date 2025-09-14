@@ -442,16 +442,16 @@ Tenrec includes a comprehensive test suite. Run tests with pytest:
 
 ```bash
 # Run all tests
-IDADIR="/path/to/ida" uv run pytest tests/
+IDADIR="/path/to/ida" uv run pytest tenrec/tests/
 
 # Run specific test module
-IDADIR="/path/to/ida" uv run pytest tests/unit/test_functions_plugin.py
+IDADIR="/path/to/ida" uv run pytest tenrec/tests/unit/test_functions_plugin.py
 
 # Run with coverage report
-IDADIR="/path/to/ida" uv run pytest tests/ --cov=tenrec --cov-report=html
+IDADIR="/path/to/ida" uv run pytest tenrec/tests/ --cov=tenrec --cov-report=html
 
 # Run tests with verbose output
-IDADIR="/path/to/ida" uv run pytest tests/ -v
+IDADIR="/path/to/ida" uv run pytest tenrec/tests/ -v
 ```
 
 ### Writing Tests
