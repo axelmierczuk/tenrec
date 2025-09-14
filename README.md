@@ -66,9 +66,8 @@ is formatted in an email format, and may require decryption. Do not try to guess
 flag, use your analysis to guide you towards the correct answer based on the binary.
 
 
-<video width="100%" height="100%" controls>
-  <source src="https://raw.githubusercontent.com/axelmierczuk/tenrec/refs/heads/main/tenrec/documentation/static/_media/darn-mice-solve.mp4" type="video/mp4">
-</video>
+https://github.com/user-attachments/assets/3eb442dd-9b7a-44a6-836b-b73f99f4c2f3
+
 
 ## Installation
 
