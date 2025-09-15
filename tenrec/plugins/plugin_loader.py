@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 from collections.abc import Iterator
 from importlib.metadata import Distribution, PackageNotFoundError, distribution, distributions, entry_points
 from pathlib import Path
@@ -14,6 +13,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
 from tenrec.plugins.models import PluginBase
+from tenrec.utils import get_venv_python_path
 
 
 EP_GROUP = "tenrec.plugins"
@@ -47,20 +47,6 @@ class LoadedPlugin(BaseModel):
 # ---------- install/discovery utilities ----------
 
 
-def _run(cmd: list[str]) -> None:
-    proc = subprocess.run(
-        cmd,
-        check=True,
-        capture_output=True,
-        text=True,
-        env=os.environ.copy(),
-    )
-    if proc.stdout:
-        print(proc.stdout, end="")
-    if proc.stderr:
-        print(proc.stderr, end="")
-
-
 def _is_git_url(spec: str) -> bool:
     s = spec.lower()
     return s.startswith(("git+", "ssh://", "git://")) or s.endswith(".git")
@@ -79,11 +65,19 @@ def _install_with_uv(spec: str, editable: bool = False) -> list[str]:
     before = {d.metadata["Name"] for d in distributions()}
 
     logger.info("Installing plugin spec via python: {}", spec)
-    base = [sys.executable, "-m", "pip", "install"]
+    base = ["uv", "pip", "install", "--python", get_venv_python_path()]
     if editable:
         base.append("-e")
+    else:
+        base.append("--upgrade")
     cmd = [*base, spec]
-    _run(cmd)
+    subprocess.run(
+        cmd,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=os.environ.copy(),
+    )
 
     after = {d.metadata["Name"] for d in distributions()}
     new = sorted(after - before)
