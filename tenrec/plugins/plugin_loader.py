@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import subprocess
+import sys
 from collections.abc import Iterator
 from importlib.metadata import Distribution, PackageNotFoundError, distribution, distributions, entry_points
 from pathlib import Path
@@ -47,9 +47,9 @@ class LoadedPlugin(BaseModel):
 # ---------- install/discovery utilities ----------
 
 
-def _run(cmd: str) -> None:
+def _run(cmd: list[str]) -> None:
     proc = subprocess.run(
-        shlex.split(cmd),
+        cmd,
         check=True,
         capture_output=True,
         text=True,
@@ -77,9 +77,14 @@ def _is_local_dir(spec: str) -> bool:
 def _install_with_uv(spec: str, editable: bool = False) -> list[str]:
     """Install 'spec' with uv and return newly added distributions' names."""
     before = {d.metadata["Name"] for d in distributions()}
-    flag = "-e " if editable else ""
-    logger.info("Installing plugin spec via uv: {}", spec)
-    _run(f"uv pip install --system {flag}{spec}")
+
+    logger.info("Installing plugin spec via python: {}", spec)
+    base = [sys.executable, "-m", "pip", "install"]
+    if editable:
+        base.append("-e")
+    cmd = [*base, spec]
+    _run(cmd)
+
     after = {d.metadata["Name"] for d in distributions()}
     new = sorted(after - before)
     if not new:
