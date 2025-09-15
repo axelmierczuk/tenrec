@@ -13,7 +13,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
 from tenrec.plugins.models import PluginBase
-from tenrec.utils import get_venv_python_path
+from tenrec.utils import get_venv_path
 
 
 EP_GROUP = "tenrec.plugins"
@@ -65,7 +65,7 @@ def _install_with_uv(spec: str, editable: bool = False) -> list[str]:
     before = {d.metadata["Name"] for d in distributions()}
 
     logger.info("Installing plugin spec via python: {}", spec)
-    base = ["uv", "pip", "install", "--python", get_venv_python_path()]
+    base = ["uv", "pip", "install"]
     if editable:
         base.append("-e")
     else:
@@ -76,6 +76,7 @@ def _install_with_uv(spec: str, editable: bool = False) -> list[str]:
         check=True,
         capture_output=True,
         text=True,
+        cwd=get_venv_path().parent,
         env=os.environ.copy(),
     )
 
