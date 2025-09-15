@@ -9,7 +9,7 @@
 [![Python Version](https://img.shields.io/pypi/pyversions/tenrec)](https://pypi.org/project/tenrec/)
 [![License](https://img.shields.io/pypi/l/tenrec)](https://img.shields.io/pypi/l/tenrec/0.1.0)
 
-A lightweight, extendable, multi-session, IDA Pro MCP framework built with [ida-domain](https://ida-domain.docs.hex-rays.com/)
+A headless, extendable, multi-session, IDA Pro MCP framework built with [ida-domain](https://ida-domain.docs.hex-rays.com/)
 and FastMCP, inspired by [mrexodia/ida-pro-mcp](https://github.com/mrexodia/ida-pro-mcp). Supports custom plugins 
 for easy extension.
 
@@ -23,7 +23,6 @@ for easy extension.
   - [docs](#docs)
   - [plugins](#plugins)
 - [Creating Custom Plugins](#creating-custom-plugins)
-- [Creating Custom Plugins](#creating-custom-plugins)
 - [Testing](#testing)
 - [Contributing](#contributing)
 - [Future Work](#future-work)
@@ -33,6 +32,13 @@ for easy extension.
 Tenrec aims to simplify the MCP experience with IDA Pro. Inspired by the existing IDA Pro plugin ecosystem and 
 [ida-pro-mcp](https://github.com/mrexodia/ida-pro-mcp), Tenrec provides a robust framework for building and using 
 plugins to automate and enhance reverse engineering tasks with LLMs.
+
+Key features:
+
+- Completely headless IDA Pro interaction, made possible with ida-domain
+- Multi-session analysis, great when working with a libraries used by an application
+- Custom plugin support
+- Auto-docs generation (including plugin docs)
 
 Out-of-the box, Tenrec includes the following core plugins:
 
@@ -45,9 +51,6 @@ Out-of-the box, Tenrec includes the following core plugins:
 - **Bytes**: Read and patch binary data at any address.
 - **Types**: Manage type information and data structures.
 - **Entries**: Access entry points and exported functions.
-
-Tenrec is designed to handle multiple analysis sessions simultaneously, making it ideal for complex projects involving 
-multiple binaries or libraries. 
 
 For a complete breakdown of available plugins and their operations, check out the [documentation](https://axelmierczuk.github.io/tenrec/#/).
 
