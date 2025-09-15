@@ -36,7 +36,7 @@ plugins to automate and enhance reverse engineering tasks with LLMs.
 Key features:
 
 - Completely headless IDA Pro interaction, made possible with ida-domain
-- Multi-session analysis, great when working with a libraries used by an application
+- Multi-session analysis, great when working with libraries used by an application
 - Custom plugin support
 - Auto-docs generation (including plugin docs)
 
