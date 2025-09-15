@@ -79,7 +79,7 @@ def _install_with_uv(spec: str, editable: bool = False) -> list[str]:
     before = {d.metadata["Name"] for d in distributions()}
     flag = "-e " if editable else ""
     logger.info("Installing plugin spec via uv: {}", spec)
-    _run(f"uv pip install {flag}{spec}")
+    _run(f"uv pip install --system {flag}{spec}")
     after = {d.metadata["Name"] for d in distributions()}
     new = sorted(after - before)
     if not new:
