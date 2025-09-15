@@ -229,10 +229,11 @@ def load_plugins(paths: list[str]) -> tuple[dict[str, LoadedPlugin], list[str]]:
             pairs = _discover_eps_for_dists([])
 
         # Load each EP and collect results (only add once per plugin name)
-        any_loaded_for_spec = False
         for dist_name, ep_name in pairs:
+            any_loaded_for_spec = False
+
             for loaded in _load_ep(dist_name, ep_name):
-                if not loaded:
+                if loaded is None:
                     continue
                 # Only count EPs that plausibly came from this spec:
                 if new_dists and loaded.dist_name not in new_dists:
@@ -241,6 +242,7 @@ def load_plugins(paths: list[str]) -> tuple[dict[str, LoadedPlugin], list[str]]:
                 if loaded.name in plugins:
                     logger.warning("Plugin with name '{}' already loaded, skipping duplicate.", loaded.name)
                     continue
+
                 plugins[loaded.name] = loaded
                 any_loaded_for_spec = True
 
