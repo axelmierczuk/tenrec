@@ -41,4 +41,6 @@ class SamplePluginA(PluginBase):
         return list(self.database.strings.get_all())
 
 
-plugin = SamplePluginA()
+class SamplePluginB(SamplePluginA):
+    name = "plugin_b"
+    version = "1.0.0"

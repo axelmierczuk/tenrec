@@ -209,23 +209,18 @@ tenrec run --transport sse
 
 Manage tenrec plugins. You can add, list, or remove plugins. 
 
-Adding plugins is made simple by specifying either a local path to the plugin file or a git repository URL.
-When adding from a git repository, you can specify the commit, branch, tag, or a subdirectory!
+Adding plugins is made simple by specifying a package name that uv can process. For example, this can be a package
+that can be found on pypi, a git repo, or a local path. Since under the hood tenrec uses uv to install plugins,
+you can use any format supported by uv.
 
-Some valid GitHub URLs include:
-
-- `git+ssh://git@github.com/axelmierczuk/tenrec#subdir=examples/plugin_a`
-- `git+https://git@github.com/axelmierczuk/tenrec#branch=main&subdir=examples/plugin_a`
-
-If specifying a local directory, tenrec will look for a `plugin` variable in each `.py` file in the directory and 
-attempt to load it as a plugin. For more details on creating plugins, see the [Creating Custom Plugins](#creating-custom-plugins) section.
+#### Examples
 
 ```bash
-tenrec plugins add --plugin \
-    "git+ssh://git@github.com/axelmierczuk/tenrec#subdir=examples/plugin_a"
-tenrec plugins list
-tenrec plugins remove --name plugin_a
+tenrec plugins add --plugin "example-package" # Install from PyPI
+tenrec plugins add --plugin "/path/to/local/plugin" # Install from local path
+tenrec plugins add --plugin "git+ssh://git@github.com/axelmierczuk/tenrec#subdir=examples/plugin_a" # Install from git repo
 ```
+
 
 <details>
 
@@ -352,8 +347,14 @@ the `ida-domain` database APIs. Import it with:
   - Use standard Python types (e.g., `int`, `str`, `list`, `dict`) or Pydantic models for parameters and return types. 
 
 
-Once your plugin is defined, create an instance of it and assign it to a variable named `plugin`. 
-That way, tenrec can automatically discover and load it.
+Once your plugin is defined, create a pyproject.toml file to package it, making sure to include:
+
+```toml
+[project.entry-points."tenrec.plugins"]
+plugin = "file:ClassName"
+``` 
+
+A more complex example can be found in the [examples/plugin_a](examples/plugin_a) directory.
 
 <details>
 
@@ -400,7 +401,6 @@ class CustomAnalysisPlugin(PluginBase):
         # Packer detection logic
         return {"packed": False, "packer": None}
 
-plugin = CustomAnalysisPlugin()
 ```
 </details>
 

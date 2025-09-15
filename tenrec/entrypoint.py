@@ -5,12 +5,11 @@ from fastmcp.server.server import Transport
 from loguru import logger
 
 from tenrec.options import PostGroup, docs_options, plugin_options, run_options
-from tenrec.plugins.plugin_loader import LoadedPlugin
 from tenrec.utils import console
 
 
 @click.group(cls=PostGroup, name="tenrec")
-@click.version_option("1.0.0", prog_name="tenrec")
+@click.version_option("0.1.4", prog_name="tenrec")
 @click.option("--quiet", "-q", is_flag=True, default=False, help="Suppress non-error log messages.")
 def cli(quiet: bool) -> None:
     """Tenrec cli utility."""
@@ -54,11 +53,7 @@ def list_plugins() -> None:
         return
 
     for name, plugin in config.plugins.items():
-        console.print(f"[green]{name} ({plugin.plugin.version})[/]")
-        console.print(f"  [dim]Description:[/] {plugin.plugin.__doc__}")
-        console.print(f"  [dim]Location:[/] {plugin.location}", highlight=False)
-        if plugin.git is not None:
-            console.print(f"  [dim]Repo:[/] {plugin.git}", highlight=False)
+        console.print(f"[green]{name} ({plugin.plugin.version})[/]: [dim]{plugin.plugin.__doc__}[/]")
 
 
 @plugin_manager.command("add")
@@ -148,7 +143,7 @@ def run(
             logger.debug("Getting config plugins")
             for p in config_data.plugins.values():
                 plugins.append(p.plugin)
-                logger.debug("  [dim]{}[/]", p.location)
+                logger.debug("  [dim]{}:{}[/]", p.dist_name, p.ep_name)
     if len(plugins) == 0:
         logger.warning("Weird, no plugins found to run. Continuing anyway...")
 
@@ -177,7 +172,7 @@ def docs(name: str, repo: str, readme: str, plugin: tuple, output: str, base_pat
     plugin_instances = []
     for p in plugins.values():
         plugin_instances.append(p.plugin)
-        logger.debug("  [dim]{}[/]", p.location)
+        logger.debug("  [dim]{}:{}[/]", p.dist_name, p.ep_name)
 
     logger.info("Generating documentation")
 
