@@ -85,7 +85,7 @@ def add_plugin(plugin: tuple) -> None:
     type=str,
     multiple=True,
     required=True,
-    help="Plugin name(s) to remove from the configuration",
+    help="Plugin dist(s) to remove from the configuration",
 )
 def remove_plugin(dist: tuple) -> None:
     """Remove an existing plugin."""

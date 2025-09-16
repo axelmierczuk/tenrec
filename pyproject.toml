@@ -51,3 +51,16 @@ dev = [
     "pytest-timeout>=2.2.0",
     "hatchling>=1.27",
 ]
+
+[project.entry-points."tenrec.plugins"]
+server = "tenrec.server:Server"
+bytes = "tenrec.plugins.plugins:BytesPlugin"
+comments = "tenrec.plugins.plugins:CommentsPlugin"
+entries = "tenrec.plugins.plugins:EntriesPlugin"
+functions = "tenrec.plugins.plugins:FunctionsPlugin"
+names = "tenrec.plugins.plugins:NamesPlugin"
+segments = "tenrec.plugins.plugins:SegmentsPlugin"
+strings = "tenrec.plugins.plugins:StringsPlugin"
+types = "tenrec.plugins.plugins:TypesPlugin"
+xrefs = "tenrec.plugins.plugins:XrefsPlugin"
+

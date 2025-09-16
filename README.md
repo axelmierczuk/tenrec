@@ -196,11 +196,12 @@ tenrec run --transport sse
 │                                                           not be loaded.                 │
 │ --transport           -t  [stdio|http|sse|streamable-htt  Transport type to use for      │
 │                           p]                              communication (default: stdio) │
-│ --plugin              -p  TEXT                            Plugin path(s) or git          │
-│                                                           repository URL(s) to load the  │
-│                                                           plugin from.                   │
+│ --plugin              -p  TEXT                            Plugin to load. Could be a     │
+│                                                           PyPI package name, local path, │
+│                                                           or git repo.                   │
 │ --help                                                    Show this message and exit.    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
 ```
 
 </details>
@@ -222,6 +223,15 @@ tenrec plugins add --plugin \                       # Install from git repo
   "git+ssh://git@github.com/axelmierczuk/tenrec#subdirectory=examples"
 ```
 
+```bash
+# Install from git repo
+tenrec plugins add --plugin \
+  "git+ssh://git@github.com/axelmierczuk/tenrec#subdirectory=examples"
+# List installed plugins
+tenrec plugins list
+# Remove a plugin by dist name
+tenrec plugins remove --dist example_plugin
+```
 
 <details>
 
@@ -248,7 +258,8 @@ tenrec plugins add --plugin \                       # Install from git repo
  Add a new plugin.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────────────────╮
-│ *  --plugin  -p  TEXT  Plugin path(s) or git repository URL(s) to load the plugin from.  │
+│ *  --plugin  -p  TEXT  Plugin to load. Could be a PyPI package name, local path, or git  │
+│                        repo.                                                             │
 │                        [required]                                                        │
 │    --help              Show this message and exit.                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────╯
@@ -270,7 +281,7 @@ tenrec plugins add --plugin \                       # Install from git repo
  Remove an existing plugin.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────────────────╮
-│ *  --name  -n  TEXT  Plugin name(s) to remove from the configuration [required]          │
+│ *  --dist  -d  TEXT  Plugin dists(s) to remove from the configuration [required]         │
 │    --help            Show this message and exit.                                         │
 ╰──────────────────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -310,12 +321,11 @@ tenrec docs -p tenrec/plugins/plugins
 │    --base-path      TEXT       The base path for the URL.                                │
 │    --repo           TEXT       The URL of the repository for the project.                │
 │    --name           TEXT       Name of the documentation set. [default: tenrec]          │
-│ *  --plugin     -p  TEXT       Plugin path(s) or git repository URL(s) to load the       │
-│                                plugin from.                                              │
+│ *  --plugin     -p  TEXT       Plugin to load. Could be a PyPI package name, local path, │
+│                                or git repo.                                              │
 │                                [required]                                                │
 │    --help                      Show this message and exit.                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────╯
-
 ```
 
 </details>
