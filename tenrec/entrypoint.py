@@ -54,7 +54,7 @@ def list_plugins() -> None:
 
     for name, plugin in config.plugins.items():
         console.print(
-            f"[cyan]{plugin.dist_name}[/]: [green]{name}=={plugin.plugin.version})[/] [dim]({plugin.plugin.__doc__})[/]"
+            f"[cyan bold]{plugin.dist_name}[/] - [green]{name}=={plugin.plugin.version}[/] [dim]({plugin.plugin.__doc__})[/]"
         )
 
 
