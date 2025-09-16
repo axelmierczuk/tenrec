@@ -79,15 +79,13 @@ class Config(BaseModel):
     def remove_plugins(self, dists: list[str]) -> int:
         removed = 0
         for dist in dists:
-            found = False
+            to_remove = []
             for plugin in self.plugins.values():
                 if plugin.dist_name != dist:
                     continue
-                del self.plugins[plugin.name]
-                removed += 1
-                found = True
+                to_remove.append(plugin.name)
 
-            if not found:
+            if len(to_remove) == 0:
                 logger.warning("Plugins with dist '{}' does not exist, skipping.", dist)
                 continue
 
@@ -100,6 +98,9 @@ class Config(BaseModel):
                 env=os.environ.copy(),
             )
 
+            for name in to_remove:
+                del self.plugins[name]
+                removed += 1
             logger.success("Removed plugins for: [dim]{}[/]", dist)
         return removed
 
