@@ -38,6 +38,20 @@ tenrec = "tenrec.__main__:main"
 [tool.uv]
 package = true
 
+[tool.hatch.build]
+exclude =[
+    "tenrec/tests/**",
+    "examples/**",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "tenrec/**",
+  "pyproject.toml",
+  "README.md",
+  "LICENSE",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["tenrec"]
 
@@ -51,3 +65,15 @@ dev = [
     "pytest-timeout>=2.2.0",
     "hatchling>=1.27",
 ]
+
+[project.entry-points."tenrec.plugins"]
+bytes = "tenrec.plugins.plugins:BytesPlugin"
+comments = "tenrec.plugins.plugins:CommentsPlugin"
+entries = "tenrec.plugins.plugins:EntriesPlugin"
+functions = "tenrec.plugins.plugins:FunctionsPlugin"
+names = "tenrec.plugins.plugins:NamesPlugin"
+segments = "tenrec.plugins.plugins:SegmentsPlugin"
+strings = "tenrec.plugins.plugins:StringsPlugin"
+types = "tenrec.plugins.plugins:TypesPlugin"
+xrefs = "tenrec.plugins.plugins:XrefsPlugin"
+

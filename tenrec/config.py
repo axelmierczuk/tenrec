@@ -1,13 +1,15 @@
 import json
+import os
+import subprocess
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from pydantic import BaseModel, PrivateAttr, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 from tenrec.installer import Installer
-from tenrec.plugins.plugin_loader import LoadedPlugin, load_plugins
+from tenrec.plugins.plugin_loader import LoadedPlugin, load_plugin_by_dist_ep, load_plugins
 from tenrec.utils import config_path, console
 
 
@@ -15,13 +17,13 @@ class Config(BaseModel):
     """Configuration for tenrec, including installed plugins.
 
     The config file works by providing an abstraction layer between what's stored on disk, and
-    loaded in memory. The `plugins` field is a list of `LoadedPlugin` objects, which include
+    loaded in memory. The `plugins` field is a dict of `LoadedPlugin` objects, which include
     the actual plugin instance loaded from the specified location. The `Plugin` model is used
     for serialization/deserialization to/from JSON.
     """
 
-    plugins: dict[str, LoadedPlugin] = {}
-    load_failures: dict[str, dict] = {}
+    plugins: dict[str, LoadedPlugin] = Field(default_factory=dict)
+    load_failures: dict[str, dict] = Field(default_factory=dict)
     load_failures_exist: bool = False
     _snapshot: "Config | None" = PrivateAttr(default_factory=lambda: None)
 
@@ -74,24 +76,37 @@ class Config(BaseModel):
             added += 1
         return added
 
-    def remove_plugins(self, names: list[str]) -> int:
+    def remove_plugins(self, dists: list[str]) -> int:
         removed = 0
-        for name in names:
-            if name not in self.plugins:
-                logger.warning("Plugin with name '{}' does not exist, skipping.", name)
+        for dist in dists:
+            to_remove = []
+            for plugin in self.plugins.values():
+                if plugin.dist_name != dist:
+                    continue
+                to_remove.append(plugin.name)
+
+            if len(to_remove) == 0:
+                logger.warning("Plugins with dist '{}' does not exist, skipping.", dist)
                 continue
-            del self.plugins[name]
-            removed += 1
-            logger.success("Removed plugin: [dim]{}[/]", name)
+
+            cmd = ["uv", "pip", "uninstall", dist]
+            subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=os.environ.copy(),
+            )
+
+            for name in to_remove:
+                del self.plugins[name]
+                removed += 1
+            logger.success("Removed plugins for: [dim]{}[/]", dist)
         return removed
 
     @property
     def config_path(self) -> Path:
         return config_path()
-
-    @property
-    def plugin_paths(self) -> list[str]:
-        return [str(p.location) for p in self.plugins.values()]
 
     """
     Change detection logic
@@ -167,19 +182,25 @@ class Config(BaseModel):
 
     @model_validator(mode="before")
     def load_plugins_validator(cls, values: dict) -> dict:  # noqa: N805
-        stored_plugins = values.get("plugins")
-
-        if stored_plugins is None or not isinstance(stored_plugins, dict):
-            msg = "Config is improperly formatted: 'plugins' must be a dict"
-            raise ValueError(msg)
-        if not all(p.get("location") for p in stored_plugins.values()):
-            msg = "Config is improperly formatted: 'plugins' must be all contain 'location'"
-            raise ValueError(msg)
-
-        values["plugins"], load_failures = load_plugins(paths=[p["location"] for p in stored_plugins.values()])
         values["load_failures"] = {}
+        plugins = {}
 
-        num_fail = len(load_failures)
+        for p in values["plugins"].values():
+            name = p.get("name")
+            dist_name = p.get("dist_name")
+            ep_name = p.get("ep_name")
+            if not name or not dist_name or not ep_name:
+                logger.warning("Skipping invalid plugin entry in config: {}", p)
+                continue
+            try:
+                logger.debug("Loading plugin '{}' from {}:{}", name, dist_name, ep_name)
+                plugin_obj = load_plugin_by_dist_ep(dist_name, ep_name)
+                plugins[name] = {**p, "plugin": plugin_obj}
+            except (RuntimeError, ImportError, ValueError):
+                values["load_failures"][name] = p
+
+        values["plugins"] = plugins
+        num_fail = len(values["load_failures"])
         if num_fail == 0:
             return values
 
@@ -189,15 +210,10 @@ class Config(BaseModel):
         msg = f"[red]{num_fail} plugin{plural} failed to load[/], would you like to remove them from the config? (y/N) "
         choice = console.input(msg).lower()
         if choice == "y":
+            values["load_failures"] = {}
             return values
+
         logger.info("Fair enough! They'll remain in your config.")
-        # I know... I know... O(n^2) but the lists should be small
-        for k, v in stored_plugins.items():
-            for load_failure in load_failures:
-                if load_failure == v["location"]:
-                    logger.debug("Keeping plugin: [dim]{}[/]", k)
-                    values["load_failures"][k] = v
-                    break
         return values
 
     @model_validator(mode="after")

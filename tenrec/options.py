@@ -18,7 +18,7 @@ def plugin_options(required: bool = True) -> Callable[[F], F]:
             type=str,
             multiple=True,
             required=required,
-            help="Plugin path(s) or git repository URL(s) to load the plugin from.",
+            help="Plugin to load. Could be a PyPI package name, local path, or git repo.",
         )(f)
         return f  # noqa: RET504
 

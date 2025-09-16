@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "example_plugin"
+version = "1.0.0"
+description = "A sample plugin for the Tenrec framework."
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Axel Mierczuk"}]
+requires-python = ">=3.10"
+dependencies = [
+    "tenrec",
+]
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["plugins"]
+
+[project.entry-points."tenrec.plugins"]
+plugin_a = "plugins.example_a:SamplePluginA"
+# Add more!
+# plugin_whatever = "plugins.example_whatever:SamplePluginWhatever"

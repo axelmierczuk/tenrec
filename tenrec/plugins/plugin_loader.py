@@ -1,33 +1,32 @@
-import importlib
-import importlib.util
+# SPDX-License-Identifier: MIT
+from __future__ import annotations
+
 import json
-import shutil
-import sys
+import os
+import subprocess
 from collections.abc import Iterator
+from importlib.metadata import Distribution, PackageNotFoundError, distribution, distributions, entry_points
 from pathlib import Path
 from typing import Any
 
-import giturlparse
-from git import Repo
-from giturlparse import GitUrlParsed
 from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
 from tenrec.plugins.models import PluginBase
-from tenrec.utils import console, plugin_path
+from tenrec.utils import get_venv_path
 
 
-PLUGIN_VAR = "plugin"
+EP_GROUP = "tenrec.plugins"
 
 
 class LoadedPlugin(BaseModel):
-    """Represents a loaded plugin."""
+    """Represents a loaded plugin discovered via entry points."""
 
     name: str
     description: str | None = None
     version: str
-    location: Path
-    git: str | None = None
+    dist_name: str
+    ep_name: str
     plugin: PluginBase
 
     def model_dump_json(self, **kwargs: Any) -> str:
@@ -38,228 +37,273 @@ class LoadedPlugin(BaseModel):
             "name": self.name,
             "description": self.description,
             "version": self.version,
-            "location": str(self.location),
-            "git": self.git,
+            "dist_name": self.dist_name,
+            "ep_name": self.ep_name,
         }
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-def load_plugins(paths: list) -> tuple[dict[str, LoadedPlugin], list[str]]:
-    """Load plugins from the given paths."""
-    plugins = {}
-    load_failures = []
-
-    for plugin in list(paths):
-        for obj in _load(plugin):
-            if obj is None:
-                load_failures.append(plugin)
-                continue
-
-            if not isinstance(obj.plugin, PluginBase):
-                load_failures.append(plugin)
-                continue
-
-            if obj.plugin.name in plugins:
-                logger.warning("Plugin with name '{}' already loaded, skipping duplicate.", obj.plugin.name)
-                continue
-            plugins[obj.plugin.name] = obj
-
-    return plugins, load_failures
+# ---------- install/discovery utilities ----------
 
 
-def _parse_github_url(url: GitUrlParsed, plugin_string: str) -> tuple[Path, bool]:
-    success = True
-    branch = None
-    subdir = None
-    if "#" in plugin_string:
-        plugin_string, params = plugin_string.split("#", 1)
-        if params:
-            for param in params.split("&"):
-                key, _, value = param.partition("=")
-                if not key or not value:
-                    continue
-                if key in {"branch", "tag", "commit"}:
-                    branch = value
-                elif key == "subdir":
-                    subdir = value
-                else:
-                    continue
+def _is_git_url(spec: str) -> bool:
+    s = spec.lower()
+    return s.startswith(("git+", "ssh://", "git://")) or s.endswith(".git")
 
-    def _should_clone(p: Path) -> bool:
-        if p.exists():
-            logger.warning("The path to the plugin already exists!")
-            choice = console.input(f"Would you like to re-clone [dim]{url.name}[/]? (y/N): ").lower()
-            if choice != "y":
-                logger.info("Got it! Skipping re-clone.")
-                return False
-            shutil.rmtree(p)
-        return True
 
-    path = plugin_path()
-    path = path / url.user / url.name
-
+def _is_local_dir(spec: str) -> bool:
     try:
-        if _should_clone(path):
-            path.mkdir(parents=True, exist_ok=True)
-            Repo.clone_from(plugin_string, path)
-
-        if branch:
-            repo = Repo(path)
-            repo.git.checkout(branch)
-        if subdir:
-            path = path / subdir
-            if not path.exists() or not path.is_dir():
-                logger.error(
-                    "Subdirectory [dim]{}[/] does not exist in the repository [dim]{}[/]",
-                    subdir,
-                    plugin_string,
-                )
-                success = False
-    except Exception as e:
-        logger.error("Failed to clone plugin from [dim]{}[/]:\n---\n[bold red]{}[/]\n---", plugin_string, e)
-        success = False
-    return path, success
+        p = Path(spec).expanduser().resolve()
+    except Exception:
+        return False
+    return p.exists() and p.is_dir()
 
 
-def _load(plugin_string: str) -> Iterator[LoadedPlugin | None]:
-    """Load and return the plugin."""
-    parsed = giturlparse.parse(plugin_string)
-    if parsed.valid:
-        logger.info("Cloning plugin from git repository: [dim]{}[/]", plugin_string)
-        path, success = _parse_github_url(parsed, plugin_string)
-        if not success:
-            yield None
-            return
-    else:
-        path = Path(plugin_string)
-        if not path.exists(follow_symlinks=True):
-            logger.error("Plugin path does not exist: [dim]{}[/]", plugin_string)
-            yield None
-            return
+def _install_with_uv(spec: str, editable: bool = False) -> list[str]:
+    """Install 'spec' with uv and return newly added distributions' names."""
+    before = {d.metadata["Name"] for d in distributions()}
 
-    def _load_helper(load_path: Path) -> LoadedPlugin | None:
-        res = None
-        if _is_file_path(load_path):
-            try:
-                p = _load_from_file(load_path)
-                if not p:
-                    return None
-                res = LoadedPlugin(name=p.name, description=p.__doc__, version=p.version, location=load_path, plugin=p)
-                if parsed.valid:
-                    res.git = plugin_string
-            except (ImportError, FileNotFoundError, AttributeError) as e:
-                logger.error("Failed to load plugin from file [dim]{}[/]:\n\t[red]{}[/]", load_path, e)
-        return res
-
-    logger.debug("Loading plugin from path: {}", path)
-    if path.is_file():
-        result = _load_helper(path)
-        yield result
-    elif path.is_dir():
-        for file in path.glob("*.py"):
-            result = _load_helper(file)
-            yield result
-    else:
-        msg = f"Invalid plugin path: {plugin_string}"
-        raise ValueError(msg)
-
-
-def _is_file_path(module: Path) -> bool:
-    """Check if module string is a file path."""
-    return module.exists() and module.is_file() and module.name.endswith(".py")
-
-
-def _load_from_file(path: Path) -> "PluginBase":
-    """Load a plugin module from file path with proper package context."""
-    logger.debug("Attempting to load plugin from file: {}", path)
-
-    if not path.exists():
-        msg = f"Plugin file not found: {path}"
-        logger.debug("{}", msg)
-        raise FileNotFoundError(msg)
-
-    # Skip package initializers as plugins
-    if path.name == "__init__.py":
-        logger.debug("Skipping package initializer: {}", path)
-        msg = f"Not a plugin module (package initializer): {path}"
-        raise ImportError(msg)
-
-    # Walk up while __init__.py exists to collect package parts (inner -> outer)
-    pkg_parts: list[str] = []
-    pkg_dir = path.parent
-    while (pkg_dir / "__init__.py").exists():
-        pkg_parts.append(pkg_dir.name)
-        pkg_dir = pkg_dir.parent
-
-    # Insert the directory ABOVE the topmost package (import root)
-    import_root = str(pkg_dir)
-    if import_root not in sys.path:
-        sys.path.insert(0, import_root)
-        logger.debug("Inserted import root into sys.path: {}", import_root)
-    else:
-        logger.debug("Import root already in sys.path: {}", import_root)
-
-    # Build fully-qualified module name correctly: outer...inner.<stem>
-    if pkg_parts:
-        package_fq = ".".join(reversed(pkg_parts))  # e.g. tenrec.plugins.plugins
-        module_name = f"{package_fq}.{path.stem}"  # e.g. tenrec.plugins.plugins.functions
-    else:
-        package_fq = None
-        module_name = f"_plugin_{path.stem}"
-
-    logger.debug(
-        "Resolved module name: {} (pkg_parts={}, import_root={})", module_name, list(reversed(pkg_parts)), import_root
+    logger.info("Installing plugin spec via python: {}", spec)
+    base = ["uv", "pip", "install"]
+    cmd = [*base, spec]
+    subprocess.run(
+        cmd,
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=get_venv_path().parent,
+        env=os.environ.copy(),
     )
 
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    if spec is None or spec.loader is None:
-        msg = f"Could not load module spec from {path}"
-        logger.debug("{}", msg)
-        raise ImportError(msg)
-
-    module = importlib.util.module_from_spec(spec)
-
-    # Set __package__ and pre-import parent package so relative imports work
-    if package_fq:
-        module.__package__ = package_fq
-        logger.debug("Set module.__package__ to: {}", module.__package__)
-        try:
-            importlib.import_module(package_fq)
-            logger.debug("Pre-imported parent package: {}", package_fq)
-        except Exception as e:
-            msg = f"Failed to import parent package '{package_fq}' for {path}: {e}"
-            logger.debug("{}", msg)
-            raise ImportError(msg) from e
+    after = {d.metadata["Name"] for d in distributions()}
+    new = sorted(after - before)
+    if not new:
+        # nothing new detected; spec may have been an upgrade or already present
+        logger.debug("No new distributions detected after install.")
     else:
-        logger.debug("Module has no package; using top-level name: {}", module_name)
+        logger.debug("New distributions detected: {}", ", ".join(new))
+    return new
 
-    # Register before exec so intra-package imports can see it
-    sys.modules[module_name] = module
+
+def _discover_eps_for_dists(dist_names: list[str]) -> list[tuple[str, str]]:
+    """Return list of (dist_name, ep_name) pairs for EP_GROUP limited to given dist_names.
+
+    If dist_names is empty, return all (dist_name, ep_name) pairs.
+    """
+    eps = entry_points().select(group=EP_GROUP)
+    # Python 3.12+ ep has .dist; for older versions we’ll match post-load
+    pairs: list[tuple[str, str]] = []
+    for ep in eps:
+        dn = getattr(getattr(ep, "dist", None), "metadata", {}).get("Name")  # type: ignore[attr-defined]
+        if dn:
+            if not dist_names or dn in dist_names:
+                pairs.append((dn, ep.name))
+        # if we can’t see dist now, we’ll allow it only when dist_names is empty
+        elif not dist_names:
+            pairs.append(("<unknown>", ep.name))
+    return pairs
+
+
+def _load_ep(dist_name: str, ep_name: str) -> Iterator[LoadedPlugin | None]:
+    # locate the entry point again (filtered)
+    matches = entry_points().select(group=EP_GROUP, name=ep_name)
+    if not matches:
+        logger.error("Entry point '{}' not found in group '{}'.", ep_name, EP_GROUP)
+        yield None
+        return
+
+    for match in matches:
+        ep = match
+
+        # load target
+        try:
+            target = ep.load()
+        except Exception as e:
+            logger.error("Failed to import entry point [dim]{}[/]: {}", ep_name, e)
+            yield None
+            continue
+
+        # instantiate if callable
+        try:
+            obj = target() if callable(target) else target
+        except Exception as e:
+            logger.error("Failed to instantiate plugin for [dim]{}[/]: {}", ep_name, e)
+            yield None
+            continue
+
+        if not isinstance(obj, PluginBase):
+            logger.error(
+                "Entry point [dim]{}[/] did not yield a PluginBase (got: {}).",
+                ep_name,
+                type(obj).__name__,
+            )
+            yield None
+            continue
+
+        # resolve distribution metadata
+        resolved_dist_name = dist_name
+        if resolved_dist_name in ("", "<unknown>", None):
+            # Best-effort: try to find which dist provides the module via importlib.metadata
+            try:
+                # ep.module is available on 3.12; otherwise rely on ep value fallback
+                # We can try reading distribution from plugin's package
+                mod = obj.__class__.__module__.split(".")[0]
+                resolved_dist_name = distribution(mod).metadata["Name"]  # type: ignore[arg-type]
+            except Exception:
+                resolved_dist_name = "<unknown>"
+
+        # metadata fallbacks
+        dist_obj: Distribution | None = None
+        try:
+            if resolved_dist_name not in ("<unknown>",):
+                dist_obj = next((d for d in distributions() if d.metadata["Name"] == resolved_dist_name), None)
+        except Exception:
+            dist_obj = None
+
+        dist_version = dist_obj.version if dist_obj else None  # type: ignore[assignment]
+        dist_summary = (dist_obj.metadata.get("Summary") if dist_obj else None) or None  # type: ignore[union-attr]
+
+        plugin_name = getattr(obj, "name", ep_name)
+        plugin_version = getattr(obj, "version", None) or dist_version or "0.0.0"
+        plugin_desc = getattr(obj, "__doc__", None) or dist_summary
+        if isinstance(plugin_desc, str):
+            plugin_desc = plugin_desc.strip() or None
+
+        yield LoadedPlugin(
+            name=plugin_name,
+            description=plugin_desc,
+            version=str(plugin_version),
+            dist_name=str(resolved_dist_name),
+            ep_name=ep_name,
+            plugin=obj,
+        )
+
+
+def load_plugins(paths: list[str]) -> tuple[dict[str, LoadedPlugin], list[str]]:
+    """Install and load plugins from a list of specs.
+
+    Available spec types:
+      - Local directories (installed editable with uv)
+      - Git repos (e.g., git+https://..., ssh://git@..., ...; supports #subdirectory=)
+      - Package specs (PyPI names, with optional versions/extras)
+
+    Returns:
+        (plugins_by_name, load_failures)
+    """
+    plugins: dict[str, LoadedPlugin] = {}
+    failures: list[str] = []
+
+    for spec in list(paths):
+        new_dists: list[str] = []
+        try:
+            if _is_local_dir(spec):
+                # local dir → editable install
+                new_dists = _install_with_uv(str(Path(spec).resolve()), editable=True)
+            elif _is_git_url(spec):
+                # git URL → normal install; uv supports refs/subdirectory via standard pip URL fragment
+                new_dists = _install_with_uv(spec)
+            else:
+                # registry/package spec → normal install (or upgrade/no-op)
+                new_dists = _install_with_uv(spec)
+        except subprocess.CalledProcessError as e:
+            logger.error("Failed to install spec [dim]{}[/]: {}", spec, e.stderr or e.stdout or e)
+            failures.append(spec)
+            continue
+        except Exception as e:
+            logger.error("Unexpected error installing [dim]{}[/]: {}", spec, e)
+            failures.append(spec)
+            continue
+
+        # Discover EPs belonging to new distributions.
+        pairs = _discover_eps_for_dists(new_dists)
+
+        # If we didn't detect new dists (already installed), try to find EPs by name match heuristic:
+        if not pairs:
+            # Heuristic: look for EPs whose name equals the spec (without extras/version),
+            # or just load all EPs and let PluginBase validation filter.
+            pairs = _discover_eps_for_dists([])
+
+        # Load each EP and collect results (only add once per plugin name)
+        for dist_name, ep_name in pairs:
+            any_loaded_for_spec = False
+
+            for loaded in _load_ep(dist_name, ep_name):
+                if loaded is None:
+                    continue
+                # Only count EPs that plausibly came from this spec:
+                if new_dists and loaded.dist_name not in new_dists:
+                    # skip EPs from unrelated distributions when we have a clear set
+                    continue
+                if loaded.name in plugins:
+                    logger.warning("Plugin with name '{}' already loaded, skipping duplicate.", loaded.name)
+                    continue
+
+                plugins[loaded.name] = loaded
+                any_loaded_for_spec = True
+
+            if not any_loaded_for_spec:
+                logger.error(
+                    "No '{}' entry points were found after installing [dim]{}[/]. "
+                    'Ensure the package declares [project.entry-points."{}"].',
+                    EP_GROUP,
+                    spec,
+                    EP_GROUP,
+                )
+                failures.append(spec)
+
+    return plugins, failures
+
+
+def _find_ep(dist_name: str, ep_name: str):
+    """Return the matching entry point object for (dist_name, ep_name)."""
+    # Prefer Python 3.12+ path: .dist is available on EntryPoint
+    eps = entry_points().select(group=EP_GROUP, name=ep_name)
+    for ep in eps:
+        dn = getattr(getattr(ep, "dist", None), "metadata", {}).get("Name")  # type: ignore[attr-defined]
+        if dn and dn == dist_name:
+            return ep
+
+    # Fallback: if .dist is unavailable, match by loading and checking module->distribution
+    for ep in eps:
+        try:
+            target = ep.load()
+            obj = target() if callable(target) else target
+            mod_top = (obj.__class__.__module__ or "").split(".")[0]
+            try:
+                dn = distribution(mod_top).metadata["Name"]  # type: ignore[arg-type]
+            except PackageNotFoundError:
+                dn = None
+            if dn == dist_name:
+                return ep
+        except Exception:
+            continue
+    return None
+
+
+def load_plugin_by_dist_ep(dist_name: str, ep_name: str) -> PluginBase:
+    """Load and instantiate the plugin specified by (dist_name, ep_name).
+
+    Returns the PluginBase instance, or raises RuntimeError with a friendly message.
+    """
+    ep = _find_ep(dist_name, ep_name)
+    if not ep:
+        msg = f"Plugin entry point '{ep_name}' not found in distribution '{dist_name}'."
+        raise RuntimeError(msg)
 
     try:
-        logger.debug("Executing module: {}", module_name)
-        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        target = ep.load()
     except Exception as e:
-        sys.modules.pop(module_name, None)
-        msg = f"Failed to execute {path}: {e}"
-        logger.debug("{}", msg)
-        raise ImportError(msg) from e
+        msg = f"Failed to import entry point '{ep_name}' from '{dist_name}': {e}"
+        raise RuntimeError(msg) from e
 
-    if not hasattr(module, PLUGIN_VAR):
-        sys.modules.pop(module_name, None)
-        msg = (
-            f"Plugin variable '{PLUGIN_VAR}' not found in module {module_name} "
-            f"({path}). Ensure the file defines `{PLUGIN_VAR}`."
-        )
-        logger.debug("{}", msg)
-        raise ImportError(msg)
+    try:
+        plugin = target() if callable(target) else target
+    except Exception as e:
+        msg = f"Failed to instantiate plugin for '{dist_name}:{ep_name}': {e}"
+        raise RuntimeError(msg) from e
 
-    plugin = getattr(module, PLUGIN_VAR)
-    logger.debug("Successfully loaded plugin '{}' from {}", PLUGIN_VAR, path)
+    if not isinstance(plugin, PluginBase):
+        msg = f"Entry point '{dist_name}:{ep_name}' did not return a PluginBase (got {type(plugin).__name__})."
+        raise TypeError(msg)
     return plugin
-
-
-def _load_from_import(module: Path) -> Any:
-    """Load module using standard import."""
-    return importlib.import_module(str(module.absolute()))

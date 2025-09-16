@@ -196,35 +196,41 @@ tenrec run --transport sse
 │                                                           not be loaded.                 │
 │ --transport           -t  [stdio|http|sse|streamable-htt  Transport type to use for      │
 │                           p]                              communication (default: stdio) │
-│ --plugin              -p  TEXT                            Plugin path(s) or git          │
-│                                                           repository URL(s) to load the  │
-│                                                           plugin from.                   │
+│ --plugin              -p  TEXT                            Plugin to load. Could be a     │
+│                                                           PyPI package name, local path, │
+│                                                           or git repo.                   │
 │ --help                                                    Show this message and exit.    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
 ```
 
 </details>
 
 ### plugins
 
-Manage tenrec plugins. You can add, list, or remove plugins. 
+Tenrec supports a plugin system that allows you to extend its functionality with custom plugins.
 
-Adding plugins is made simple by specifying either a local path to the plugin file or a git repository URL.
-When adding from a git repository, you can specify the commit, branch, tag, or a subdirectory!
+Adding plugins is made simple by specifying a package name that uv can process. For example, this can be a package
+that can be found on pypi, a git repo, or on the filesystem. Under the hood, tenrec uses uv to install plugins,
+so you can use any format supported by uv ([Astral - Managing Packages](https://docs.astral.sh/uv/pip/packages/#managing-packages)). 
 
-Some valid GitHub URLs include:
-
-- `git+ssh://git@github.com/axelmierczuk/tenrec#subdir=examples/plugin_a`
-- `git+https://git@github.com/axelmierczuk/tenrec#branch=main&subdir=examples/plugin_a`
-
-If specifying a local directory, tenrec will look for a `plugin` variable in each `.py` file in the directory and 
-attempt to load it as a plugin. For more details on creating plugins, see the [Creating Custom Plugins](#creating-custom-plugins) section.
+#### Examples
 
 ```bash
+tenrec plugins add --plugin "example-package"       # Install from PyPI
+tenrec plugins add --plugin "/path/to/local/plugin" # Install from local path
+tenrec plugins add --plugin \                       # Install from git repo
+  "git+ssh://git@github.com/axelmierczuk/tenrec#subdirectory=examples"
+```
+
+```bash
+# Install from git repo
 tenrec plugins add --plugin \
-    "git+ssh://git@github.com/axelmierczuk/tenrec#subdir=examples/plugin_a"
+  "git+ssh://git@github.com/axelmierczuk/tenrec#subdirectory=examples"
+# List installed plugins
 tenrec plugins list
-tenrec plugins remove --name plugin_a
+# Remove a plugin by dist name
+tenrec plugins remove --dist example_plugin
 ```
 
 <details>
@@ -252,7 +258,8 @@ tenrec plugins remove --name plugin_a
  Add a new plugin.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────────────────╮
-│ *  --plugin  -p  TEXT  Plugin path(s) or git repository URL(s) to load the plugin from.  │
+│ *  --plugin  -p  TEXT  Plugin to load. Could be a PyPI package name, local path, or git  │
+│                        repo.                                                             │
 │                        [required]                                                        │
 │    --help              Show this message and exit.                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────╯
@@ -274,7 +281,7 @@ tenrec plugins remove --name plugin_a
  Remove an existing plugin.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────────────────╮
-│ *  --name  -n  TEXT  Plugin name(s) to remove from the configuration [required]          │
+│ *  --dist  -d  TEXT  Plugin dists(s) to remove from the configuration [required]         │
 │    --help            Show this message and exit.                                         │
 ╰──────────────────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -314,12 +321,11 @@ tenrec docs -p tenrec/plugins/plugins
 │    --base-path      TEXT       The base path for the URL.                                │
 │    --repo           TEXT       The URL of the repository for the project.                │
 │    --name           TEXT       Name of the documentation set. [default: tenrec]          │
-│ *  --plugin     -p  TEXT       Plugin path(s) or git repository URL(s) to load the       │
-│                                plugin from.                                              │
+│ *  --plugin     -p  TEXT       Plugin to load. Could be a PyPI package name, local path, │
+│                                or git repo.                                              │
 │                                [required]                                                │
 │    --help                      Show this message and exit.                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────╯
-
 ```
 
 </details>
@@ -352,8 +358,14 @@ the `ida-domain` database APIs. Import it with:
   - Use standard Python types (e.g., `int`, `str`, `list`, `dict`) or Pydantic models for parameters and return types. 
 
 
-Once your plugin is defined, create an instance of it and assign it to a variable named `plugin`. 
-That way, tenrec can automatically discover and load it.
+Once your plugin is defined, create a `pyproject.toml` file to package it, making sure to include:
+
+```toml
+[project.entry-points."tenrec.plugins"]
+plugin = "file:ClassName" # Specify the path to your plugin class
+``` 
+
+A more complex example can be found in [examples](examples).
 
 <details>
 
@@ -400,7 +412,6 @@ class CustomAnalysisPlugin(PluginBase):
         # Packer detection logic
         return {"packed": False, "packer": None}
 
-plugin = CustomAnalysisPlugin()
 ```
 </details>
 

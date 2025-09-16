@@ -39,6 +39,3 @@ class SamplePluginA(PluginBase):
         :return: A list of strings.
         """
         return list(self.database.strings.get_all())
-
-
-plugin = SamplePluginA()
