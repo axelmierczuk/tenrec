@@ -4,12 +4,13 @@ import rich_click as click
 from fastmcp.server.server import Transport
 from loguru import logger
 
+from tenrec import __version__
 from tenrec.options import PostGroup, docs_options, plugin_options, run_options
 from tenrec.utils import console
 
 
 @click.group(cls=PostGroup, name="tenrec")
-@click.version_option("0.1.4", prog_name="tenrec")
+@click.version_option(__version__, prog_name="tenrec")
 @click.option("--quiet", "-q", is_flag=True, default=False, help="Suppress non-error log messages.")
 def cli(quiet: bool) -> None:
     """Tenrec cli utility."""
