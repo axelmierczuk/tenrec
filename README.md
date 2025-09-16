@@ -207,18 +207,19 @@ tenrec run --transport sse
 
 ### plugins
 
-Manage tenrec plugins. You can add, list, or remove plugins. 
+Tenrec supports a plugin system that allows you to extend its functionality with custom plugins.
 
 Adding plugins is made simple by specifying a package name that uv can process. For example, this can be a package
-that can be found on pypi, a git repo, or a local path. Since under the hood tenrec uses uv to install plugins,
-you can use any format supported by uv.
+that can be found on pypi, a git repo, or on the filesystem. Under the hood, tenrec uses uv to install plugins,
+so you can use any format supported by uv ([Astral - Managing Packages](https://docs.astral.sh/uv/pip/packages/#managing-packages)). 
 
 #### Examples
 
 ```bash
-tenrec plugins add --plugin "example-package" # Install from PyPI
+tenrec plugins add --plugin "example-package"       # Install from PyPI
 tenrec plugins add --plugin "/path/to/local/plugin" # Install from local path
-tenrec plugins add --plugin "git+ssh://git@github.com/axelmierczuk/tenrec#subdir=examples/plugin_a" # Install from git repo
+tenrec plugins add --plugin \                       # Install from git repo
+  "git+ssh://git@github.com/axelmierczuk/tenrec#subdirectory=examples"
 ```
 
 
@@ -347,14 +348,14 @@ the `ida-domain` database APIs. Import it with:
   - Use standard Python types (e.g., `int`, `str`, `list`, `dict`) or Pydantic models for parameters and return types. 
 
 
-Once your plugin is defined, create a pyproject.toml file to package it, making sure to include:
+Once your plugin is defined, create a `pyproject.toml` file to package it, making sure to include:
 
 ```toml
 [project.entry-points."tenrec.plugins"]
-plugin = "file:ClassName"
+plugin = "file:ClassName" # Specify the path to your plugin class
 ``` 
 
-A more complex example can be found in the [examples/plugin_a](examples/plugin_a) directory.
+A more complex example can be found in [examples](examples).
 
 <details>
 

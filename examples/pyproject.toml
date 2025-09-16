@@ -3,7 +3,7 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "PluginA"
+name = "Example Plugins"
 version = "1.0.0"
 description = "A sample plugin for the Tenrec framework."
 readme = "README.md"
@@ -18,8 +18,9 @@ dependencies = [
 package = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["plugin"]
+packages = ["plugins"]
 
 [project.entry-points."tenrec.plugins"]
-plugin_a = "plugin.main:SamplePluginA"
-plugin_b = "plugin.main:SamplePluginB"
+plugin_a = "plugins.example_a:SamplePluginA"
+# Add more!
+# plugin_whatever = "plugins.example_whatever:SamplePluginWhatever"
