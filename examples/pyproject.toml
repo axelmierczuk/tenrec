@@ -20,7 +20,8 @@ package = true
 [tool.hatch.build.targets.wheel]
 packages = ["plugins"]
 
-[project.entry-points."tenrec.plugins"]
+# Use [project.entry-points."tenrec.plugins"] in a real plugin!
+[project.entry-points."tenrec.sample-plugins"]
 plugin_a = "plugins.example_a:SamplePluginA"
 # Add more!
 # plugin_whatever = "plugins.example_whatever:SamplePluginWhatever"
