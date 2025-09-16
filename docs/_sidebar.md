@@ -4,7 +4,6 @@
   - [Entries](plugins/entries.md)
   - [Functions](plugins/functions.md)
   - [Names](plugins/names.md)
-  - [Plugin A](plugins/plugin_a.md)
   - [Segments](plugins/segments.md)
   - [Server](plugins/server.md)
   - [Strings](plugins/strings.md)
