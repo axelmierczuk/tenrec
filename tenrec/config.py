@@ -185,6 +185,7 @@ class Config(BaseModel):
                 plugin_obj = load_plugin_by_dist_ep(dist_name, ep_name)
                 values["plugins"][name] = {**p, "plugin": plugin_obj}
             except (RuntimeError, ImportError, ValueError):
+                del values["plugins"][name]
                 values["load_failures"][name] = p
 
         num_fail = len(values["load_failures"])
