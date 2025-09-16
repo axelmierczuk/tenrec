@@ -172,6 +172,7 @@ class Config(BaseModel):
     @model_validator(mode="before")
     def load_plugins_validator(cls, values: dict) -> dict:  # noqa: N805
         values["load_failures"] = {}
+        plugins = {}
 
         for p in values["plugins"].values():
             name = p.get("name")
@@ -183,11 +184,11 @@ class Config(BaseModel):
             try:
                 logger.debug("Loading plugin '{}' from {}:{}", name, dist_name, ep_name)
                 plugin_obj = load_plugin_by_dist_ep(dist_name, ep_name)
-                values["plugins"][name] = {**p, "plugin": plugin_obj}
+                plugins[name] = {**p, "plugin": plugin_obj}
             except (RuntimeError, ImportError, ValueError):
-                del values["plugins"][name]
                 values["load_failures"][name] = p
 
+        values["plugins"] = plugins
         num_fail = len(values["load_failures"])
         if num_fail == 0:
             return values
