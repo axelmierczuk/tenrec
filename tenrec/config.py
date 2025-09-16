@@ -80,6 +80,14 @@ class Config(BaseModel):
             if name not in self.plugins:
                 logger.warning("Plugin with name '{}' does not exist, skipping.", name)
                 continue
+            cmd = ["uv", "venv", str(venv)]
+            subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=os.environ.copy(),
+            )
             del self.plugins[name]
             removed += 1
             logger.success("Removed plugin: [dim]{}[/]", name)
@@ -176,7 +184,7 @@ class Config(BaseModel):
                 logger.debug("Loading plugin '{}' from {}:{}", name, dist_name, ep_name)
                 plugin_obj = load_plugin_by_dist_ep(dist_name, ep_name)
                 values["plugins"][name] = {**p, "plugin": plugin_obj}
-            except (ImportError, ValueError):
+            except (RuntimeError, ImportError, ValueError):
                 values["load_failures"][name] = p
 
         num_fail = len(values["load_failures"])
