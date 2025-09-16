@@ -83,7 +83,7 @@ class Config(BaseModel):
                 logger.warning("Plugin with name '{}' does not exist, skipping.", name)
                 continue
 
-            cmd = ["uv", "pip", "uninstall", "-y", self.plugins[name].plugin.dist_name]
+            cmd = ["uv", "pip", "uninstall", "-y", self.plugins[name].dist_name]
             subprocess.run(
                 cmd,
                 check=True,
