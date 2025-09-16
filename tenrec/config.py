@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -80,7 +82,8 @@ class Config(BaseModel):
             if name not in self.plugins:
                 logger.warning("Plugin with name '{}' does not exist, skipping.", name)
                 continue
-            cmd = ["uv", "venv", str(venv)]
+
+            cmd = ["uv", "pip", "uninstall", "-y", self.plugins[name].plugin.dist_name]
             subprocess.run(
                 cmd,
                 check=True,
