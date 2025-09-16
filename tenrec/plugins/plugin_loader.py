@@ -66,10 +66,6 @@ def _install_with_uv(spec: str, editable: bool = False) -> list[str]:
 
     logger.info("Installing plugin spec via python: {}", spec)
     base = ["uv", "pip", "install"]
-    if editable:
-        base.append("-e")
-    else:
-        base.append("--upgrade")
     cmd = [*base, spec]
     subprocess.run(
         cmd,

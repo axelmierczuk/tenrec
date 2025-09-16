@@ -38,6 +38,20 @@ tenrec = "tenrec.__main__:main"
 [tool.uv]
 package = true
 
+[tool.hatch.build]
+exclude =[
+    "tenrec/tests/**",
+    "examples/**",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "tenrec/**",
+  "pyproject.toml",
+  "README.md",
+  "LICENSE",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["tenrec"]
 
@@ -53,7 +67,6 @@ dev = [
 ]
 
 [project.entry-points."tenrec.plugins"]
-server = "tenrec.server:Server"
 bytes = "tenrec.plugins.plugins:BytesPlugin"
 comments = "tenrec.plugins.plugins:CommentsPlugin"
 entries = "tenrec.plugins.plugins:EntriesPlugin"
