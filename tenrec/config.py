@@ -76,14 +76,22 @@ class Config(BaseModel):
             added += 1
         return added
 
-    def remove_plugins(self, names: list[str]) -> int:
+    def remove_plugins(self, dists: list[str]) -> int:
         removed = 0
-        for name in names:
-            if name not in self.plugins:
-                logger.warning("Plugin with name '{}' does not exist, skipping.", name)
+        for dist in dists:
+            found = False
+            for plugin in self.plugins.values():
+                if plugin.dist_name != dist:
+                    continue
+                del self.plugins[plugin.name]
+                removed += 1
+                found = True
+
+            if not found:
+                logger.warning("Plugins with dist '{}' does not exist, skipping.", dist)
                 continue
 
-            cmd = ["uv", "pip", "uninstall", self.plugins[name].dist_name]
+            cmd = ["uv", "pip", "uninstall", dist]
             subprocess.run(
                 cmd,
                 check=True,
@@ -91,9 +99,8 @@ class Config(BaseModel):
                 text=True,
                 env=os.environ.copy(),
             )
-            del self.plugins[name]
-            removed += 1
-            logger.success("Removed plugin: [dim]{}[/]", name)
+
+            logger.success("Removed plugins for: [dim]{}[/]", dist)
         return removed
 
     @property

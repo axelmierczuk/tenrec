@@ -53,7 +53,9 @@ def list_plugins() -> None:
         return
 
     for name, plugin in config.plugins.items():
-        console.print(f"[green]{name} ({plugin.plugin.version})[/]: [dim]{plugin.plugin.__doc__}[/]")
+        console.print(
+            f"[cyan]{plugin.dist_name}[/]: [green]{name}=={plugin.plugin.version})[/] [dim]({plugin.plugin.__doc__})[/]"
+        )
 
 
 @plugin_manager.command("add")
@@ -78,25 +80,25 @@ def add_plugin(plugin: tuple) -> None:
 
 @plugin_manager.command("remove")
 @click.option(
-    "--name",
-    "-n",
+    "--dist",
+    "-d",
     type=str,
     multiple=True,
     required=True,
     help="Plugin name(s) to remove from the configuration",
 )
-def remove_plugin(name: tuple) -> None:
+def remove_plugin(dist: tuple) -> None:
     """Remove an existing plugin."""
     from tenrec.config import Config  # noqa: PLC0415
 
-    plugin = list(name)
+    dist = list(dist)
 
-    if len(plugin) == 0:
+    if len(dist) == 0:
         logger.error("No plugin paths provided!")
         return
 
     config = Config.load_config()
-    removed = config.remove_plugins(plugin)
+    removed = config.remove_plugins(dist)
     if removed == 0:
         logger.warning("No matching plugins found to remove!")
         return
