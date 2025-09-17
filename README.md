@@ -210,7 +210,7 @@ tenrec run --transport sse
 
 Tenrec supports a plugin system that allows you to extend its functionality with custom plugins.
 
-For a list of plugins, see the [wiki](https://github.com/axelmierczuk/tenrec/wiki/Plugins).
+For a list of plugins, see the [tenrec-plugins](https://github.com/axelmierczuk/tenrec-plugins) repository.
 
 Adding plugins is made simple by specifying a package name that uv can process. For example, this can be a package
 that can be found on pypi, a git repo, or on the filesystem. Under the hood, tenrec uses uv to install plugins,
