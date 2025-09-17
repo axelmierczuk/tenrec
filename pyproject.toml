@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tenrec"
-version = "0.1.4"
+version = "0.1.5"
 description = "A modern MCP server implementation for IDA Pro using ida-domain and FastMCP."
 readme = "README.md"
 license = {text = "MIT"}
@@ -67,13 +67,13 @@ dev = [
 ]
 
 [project.entry-points."tenrec.plugins"]
-bytes = "tenrec.plugins.plugins:BytesPlugin"
-comments = "tenrec.plugins.plugins:CommentsPlugin"
-entries = "tenrec.plugins.plugins:EntriesPlugin"
-functions = "tenrec.plugins.plugins:FunctionsPlugin"
-names = "tenrec.plugins.plugins:NamesPlugin"
-segments = "tenrec.plugins.plugins:SegmentsPlugin"
-strings = "tenrec.plugins.plugins:StringsPlugin"
-types = "tenrec.plugins.plugins:TypesPlugin"
-xrefs = "tenrec.plugins.plugins:XrefsPlugin"
+bytes = "tenrec.plugins.plugins.bytes:BytesPlugin"
+comments = "tenrec.plugins.plugins.comments:CommentsPlugin"
+entries = "tenrec.plugins.plugins.entries:EntriesPlugin"
+functions = "tenrec.plugins.plugins.functions:FunctionsPlugin"
+names = "tenrec.plugins.plugins.names:NamesPlugin"
+segments = "tenrec.plugins.plugins.segments:SegmentsPlugin"
+strings = "tenrec.plugins.plugins.strings:StringsPlugin"
+types = "tenrec.plugins.plugins.types:TypesPlugin"
+xrefs = "tenrec.plugins.plugins.xrefs:XrefsPlugin"
 

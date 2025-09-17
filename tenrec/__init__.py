@@ -1,6 +1,6 @@
 import importlib.metadata
 
-from tenrec.utils import disable_print as _disable_print, diable_warnings as _diable_warnings
+from tenrec.management import disable_print as _disable_print, diable_warnings as _diable_warnings
 
 
 __version__ = importlib.metadata.version(__package__ or __name__)

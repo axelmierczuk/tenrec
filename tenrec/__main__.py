@@ -2,8 +2,7 @@ import sys
 
 from loguru import logger
 
-from tenrec.environment import EnvironmentVariables, get_environment
-from tenrec.utils import console, diable_warnings, disable_print, rich_sink
+from tenrec.management import EnvironmentVariables, console, diable_warnings, disable_print, get_environment, rich_sink
 
 
 def configure_logger(env: EnvironmentVariables) -> None:

@@ -5,8 +5,7 @@ from fastmcp.server.server import Transport
 from loguru import logger
 
 from tenrec import __version__
-from tenrec.options import PostGroup, docs_options, plugin_options, run_options
-from tenrec.utils import console
+from tenrec.management import PostGroup, VenvManager, console, docs_options, plugin_options, run_options
 
 
 @click.group(cls=PostGroup, name="tenrec")
@@ -130,7 +129,10 @@ def run(
         return
 
     if custom_plugins:
-        loaded, _ = load_plugins(plugin)
+        with VenvManager(temporary=True) as venv:
+            logger.debug("Loading custom plugins into temporary venv at {}", venv.venv)
+            loaded, _ = load_plugins(venv, plugin)
+
         logger.debug("Loaded plugins: ")
         for p in loaded.values():
             plugins.append(p.plugin)
@@ -164,7 +166,9 @@ def docs(name: str, repo: str, readme: str, plugin: tuple, output: str, base_pat
     from tenrec.server import Server  # noqa: PLC0415
 
     plugin_path = list(plugin)
-    plugins, load_failures = load_plugins(plugin_path)
+    with VenvManager(temporary=True) as venv:
+        plugins, load_failures = load_plugins(venv, plugin_path)
+
     if len(plugins) == 0:
         logger.error("No plugins found to document!")
         return

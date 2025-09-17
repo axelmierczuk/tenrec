@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from collections.abc import Iterator
 from importlib.metadata import Distribution, PackageNotFoundError, distribution, distributions, entry_points
@@ -12,8 +11,8 @@ from typing import Any
 from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
+from tenrec.management import VenvManager
 from tenrec.plugins.models import PluginBase
-from tenrec.utils import get_venv_path
 
 
 EP_GROUP = "tenrec.plugins"
@@ -58,32 +57,6 @@ def _is_local_dir(spec: str) -> bool:
     except Exception:
         return False
     return p.exists() and p.is_dir()
-
-
-def _install_with_uv(spec: str, editable: bool = False) -> list[str]:
-    """Install 'spec' with uv and return newly added distributions' names."""
-    before = {d.metadata["Name"] for d in distributions()}
-
-    logger.info("Installing plugin spec via python: {}", spec)
-    base = ["uv", "pip", "install"]
-    cmd = [*base, spec]
-    subprocess.run(
-        cmd,
-        check=True,
-        capture_output=True,
-        text=True,
-        cwd=get_venv_path().parent,
-        env=os.environ.copy(),
-    )
-
-    after = {d.metadata["Name"] for d in distributions()}
-    new = sorted(after - before)
-    if not new:
-        # nothing new detected; spec may have been an upgrade or already present
-        logger.debug("No new distributions detected after install.")
-    else:
-        logger.debug("New distributions detected: {}", ", ".join(new))
-    return new
 
 
 def _discover_eps_for_dists(dist_names: list[str]) -> list[tuple[str, str]]:
@@ -180,7 +153,7 @@ def _load_ep(dist_name: str, ep_name: str) -> Iterator[LoadedPlugin | None]:
         )
 
 
-def load_plugins(paths: list[str]) -> tuple[dict[str, LoadedPlugin], list[str]]:
+def load_plugins(venv: VenvManager, paths: list[str]) -> tuple[dict[str, LoadedPlugin], list[str]]:
     """Install and load plugins from a list of specs.
 
     Available spec types:
@@ -195,17 +168,14 @@ def load_plugins(paths: list[str]) -> tuple[dict[str, LoadedPlugin], list[str]]:
     failures: list[str] = []
 
     for spec in list(paths):
-        new_dists: list[str] = []
         try:
             if _is_local_dir(spec):
-                # local dir → editable install
-                new_dists = _install_with_uv(str(Path(spec).resolve()), editable=True)
+                new_dists = venv.install(str(Path(spec).resolve()))
             elif _is_git_url(spec):
-                # git URL → normal install; uv supports refs/subdirectory via standard pip URL fragment
-                new_dists = _install_with_uv(spec)
+                new_dists = venv.install(spec)
             else:
-                # registry/package spec → normal install (or upgrade/no-op)
-                new_dists = _install_with_uv(spec)
+                new_dists = venv.install(spec)
+
         except subprocess.CalledProcessError as e:
             logger.error("Failed to install spec [dim]{}[/]: {}", spec, e.stderr or e.stdout or e)
             failures.append(spec)
@@ -215,25 +185,23 @@ def load_plugins(paths: list[str]) -> tuple[dict[str, LoadedPlugin], list[str]]:
             failures.append(spec)
             continue
 
-        # Discover EPs belonging to new distributions.
-        pairs = _discover_eps_for_dists(new_dists)
+        if not new_dists:
+            logger.warning("No new distributions were installed for spec [dim]{}[/].", spec)
+            continue
 
+        pairs = _discover_eps_for_dists(new_dists)
         # If we didn't detect new dists (already installed), try to find EPs by name match heuristic:
         if not pairs:
-            # Heuristic: look for EPs whose name equals the spec (without extras/version),
-            # or just load all EPs and let PluginBase validation filter.
-            pairs = _discover_eps_for_dists([])
+            logger.error("No entry points found for spec [dim]{}[/].", spec)
+            continue
 
-        # Load each EP and collect results (only add once per plugin name)
         for dist_name, ep_name in pairs:
             any_loaded_for_spec = False
 
             for loaded in _load_ep(dist_name, ep_name):
                 if loaded is None:
                     continue
-                # Only count EPs that plausibly came from this spec:
                 if new_dists and loaded.dist_name not in new_dists:
-                    # skip EPs from unrelated distributions when we have a clear set
                     continue
                 if loaded.name in plugins:
                     logger.warning("Plugin with name '{}' already loaded, skipping duplicate.", loaded.name)
@@ -260,7 +228,7 @@ def _find_ep(dist_name: str, ep_name: str):
     # Prefer Python 3.12+ path: .dist is available on EntryPoint
     eps = entry_points().select(group=EP_GROUP, name=ep_name)
     for ep in eps:
-        dn = getattr(getattr(ep, "dist", None), "metadata", {}).get("Name")  # type: ignore[attr-defined]
+        dn = getattr(getattr(ep, "dist", None), "metadata", {}).get("Name")
         if dn and dn == dist_name:
             return ep
 
@@ -271,7 +239,7 @@ def _find_ep(dist_name: str, ep_name: str):
             obj = target() if callable(target) else target
             mod_top = (obj.__class__.__module__ or "").split(".")[0]
             try:
-                dn = distribution(mod_top).metadata["Name"]  # type: ignore[arg-type]
+                dn = distribution(mod_top).metadata["Name"]
             except PackageNotFoundError:
                 dn = None
             if dn == dist_name:
