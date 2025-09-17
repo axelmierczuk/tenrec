@@ -6,7 +6,8 @@ from pathlib import Path
 
 from loguru import logger
 
-from tenrec.management import console, get_environment
+from tenrec.management.environment import get_environment
+from tenrec.management.utils import console
 from tenrec.plugins.models import PluginBase
 from tenrec.plugins.plugins import DEFAULT_PLUGINS
 from tenrec.server import Server

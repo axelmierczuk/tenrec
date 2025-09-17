@@ -11,7 +11,7 @@ from typing import Any
 from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
-from tenrec.management import VenvManager
+from tenrec.management.venv import VenvManager
 from tenrec.plugins.models import PluginBase
 
 
