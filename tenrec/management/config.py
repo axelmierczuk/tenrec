@@ -7,9 +7,9 @@ from loguru import logger
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 from tenrec.installer import Installer
+from tenrec.management.utils import config_path, console
+from tenrec.management.venv import VenvManager
 from tenrec.plugins.plugin_loader import LoadedPlugin, load_plugin_by_dist_ep, load_plugins
-from tenrec.utils import config_path, console
-from tenrec.venv import VenvManager
 
 
 class Config(BaseModel):

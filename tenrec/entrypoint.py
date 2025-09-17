@@ -44,7 +44,7 @@ def plugin_manager() -> None:
 @plugin_manager.command("list")
 def list_plugins() -> None:
     """List installed plugins."""
-    from tenrec.config import Config  # noqa: PLC0415
+    from tenrec.management import Config  # noqa: PLC0415
 
     config = Config.load_config()
     if len(config.plugins) == 0:
@@ -62,7 +62,7 @@ def list_plugins() -> None:
 @plugin_options(required=True)
 def add_plugin(plugin: tuple) -> None:
     """Add a new plugin."""
-    from tenrec.config import Config  # noqa: PLC0415
+    from tenrec.management import Config  # noqa: PLC0415
 
     plugin = list(plugin)
     if len(plugin) == 0:
@@ -89,7 +89,7 @@ def add_plugin(plugin: tuple) -> None:
 )
 def remove_plugin(dist: tuple) -> None:
     """Remove an existing plugin."""
-    from tenrec.config import Config  # noqa: PLC0415
+    from tenrec.management import Config  # noqa: PLC0415
 
     dist = list(dist)
 
@@ -115,7 +115,7 @@ def run(
     plugin: tuple,
 ) -> None:
     """Run the tenrec server."""
-    from tenrec.config import Config  # noqa: PLC0415
+    from tenrec.management import Config  # noqa: PLC0415
     from tenrec.plugins.plugin_loader import load_plugins  # noqa: PLC0415
     from tenrec.plugins.plugins import DEFAULT_PLUGINS  # noqa: PLC0415
     from tenrec.server import Server  # noqa: PLC0415
