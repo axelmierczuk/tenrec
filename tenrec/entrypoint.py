@@ -136,7 +136,7 @@ def run(
         logger.debug("Loaded plugins: ")
         for p in loaded.values():
             plugins.append(p.plugin)
-            logger.debug("  [dim]{}[/]", p.path)
+            logger.debug("  [dim]{}[/]", p.name)
     if not no_default_plugins:
         logger.debug("Loading default plugins")
         plugins.extend(DEFAULT_PLUGINS)
