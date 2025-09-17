@@ -7,7 +7,7 @@ from typing import Any
 from ida_domain import Database
 from loguru import logger
 from mcp.server import FastMCP
-from tenrec.environment import get_environment
+
 from tenrec.plugins.models import PluginBase
 from tenrec.plugins.models.operation import OperationProperties
 
@@ -17,7 +17,6 @@ class PluginManager:
         self._plugins = plugins
         self._database = db
         self._tools_registered = 0
-        self._env = get_environment()
 
     @property
     def tools_registered(self) -> int:
@@ -50,17 +49,17 @@ class PluginManager:
                 continue
             dispatcher = self._make_plugin_dispatcher(name, fn, properties, plugin)
 
-            if self._env.debug:
-                formatted_name = f"{plugin.name}_{name}"
-                if properties.options:
-                    loaded_options = ", ".join([x.name for x in properties.options])
-                    logger.debug(
-                        "Registering tool: [red]{}[/] with properties: [yellow]{}[/]",
-                        formatted_name,
-                        loaded_options,
-                    )
-                else:
-                    logger.debug("Registering tool: [red]{}[/]  with no properties", formatted_name)
+            # Debug logging!
+            formatted_name = f"{plugin.name}_{name}"
+            if properties.options:
+                loaded_options = ", ".join([x.name for x in properties.options])
+                logger.debug(
+                    "Registering tool: [red]{}[/] with properties: [yellow]{}[/]",
+                    formatted_name,
+                    loaded_options,
+                )
+            else:
+                logger.debug("Registering tool: [red]{}[/]  with no properties", formatted_name)
             yield dispatcher
 
     def _make_plugin_dispatcher(

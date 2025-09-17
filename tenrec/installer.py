@@ -6,11 +6,10 @@ from pathlib import Path
 
 from loguru import logger
 
-from tenrec.environment import get_environment
+from tenrec.management import console, get_environment
 from tenrec.plugins.models import PluginBase
 from tenrec.plugins.plugins import DEFAULT_PLUGINS
 from tenrec.server import Server
-from tenrec.utils import console
 
 
 class ConfigTarget(Enum):

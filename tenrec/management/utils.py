@@ -67,11 +67,3 @@ def plugin_path() -> Path:
     path = config_path().parent / "plugins"
     path.mkdir(exist_ok=True)
     return path
-
-
-def get_venv_path() -> Path:
-    return config_path().parent / ".venv"
-
-
-def get_venv_python_path() -> Path:
-    return get_venv_path() / "bin" / "python"

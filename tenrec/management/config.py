@@ -1,6 +1,4 @@
 import json
-import os
-import subprocess
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -11,6 +9,7 @@ from pydantic import BaseModel, Field, PrivateAttr, model_validator
 from tenrec.installer import Installer
 from tenrec.plugins.plugin_loader import LoadedPlugin, load_plugin_by_dist_ep, load_plugins
 from tenrec.utils import config_path, console
+from tenrec.venv import VenvManager
 
 
 class Config(BaseModel):
@@ -63,7 +62,8 @@ class Config(BaseModel):
         self._snapshot = self._fingerprint()
 
     def add_plugins(self, plugins: list[str]) -> int:
-        loaded, errors = load_plugins(plugins)
+        with VenvManager() as venv:
+            loaded, errors = load_plugins(venv, plugins)
         if len(errors) != 0:
             return len(errors)
 
@@ -89,16 +89,10 @@ class Config(BaseModel):
                 logger.warning("Plugins with dist '{}' does not exist, skipping.", dist)
                 continue
 
-            cmd = ["uv", "pip", "uninstall", dist]
-            subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                env=os.environ.copy(),
-            )
-
             for name in to_remove:
+                with VenvManager() as venv:
+                    logger.debug("Removing plugin '{}' from dist '{}'", name, dist)
+                    venv.uninstall(dist)
                 del self.plugins[name]
                 removed += 1
             logger.success("Removed plugins for: [dim]{}[/]", dist)
@@ -194,7 +188,11 @@ class Config(BaseModel):
                 continue
             try:
                 logger.debug("Loading plugin '{}' from {}:{}", name, dist_name, ep_name)
-                plugin_obj = load_plugin_by_dist_ep(dist_name, ep_name)
+
+                # Needed to update sys.path
+                with VenvManager() as _:
+                    plugin_obj = load_plugin_by_dist_ep(dist_name, ep_name)
+
                 plugins[name] = {**p, "plugin": plugin_obj}
             except (RuntimeError, ImportError, ValueError):
                 values["load_failures"][name] = p
