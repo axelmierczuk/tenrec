@@ -6,6 +6,8 @@ from typing import Any, TypeVar
 import rich_click as click
 from loguru import logger
 
+from tenrec.management.utils import console
+
 
 F = TypeVar("F", bound=Callable[..., object])
 
@@ -90,6 +92,11 @@ def docs_options(f: F) -> F:  # noqa: UP047
 
 
 class PostGroup(click.RichGroup):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        # Need to override the console to use our own
+        self.context_settings["rich_console"] = console
+
     def main(self, *a: tuple[Any, ...], **k: dict[str, Any]) -> None:
         try:
             return super().main(*a, **k)

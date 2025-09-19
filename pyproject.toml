@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tenrec"
-version = "0.1.7"
+version = "0.1.8"
 description = "A modern MCP server implementation for IDA Pro using ida-domain and FastMCP."
 readme = "README.md"
 license = {text = "MIT"}

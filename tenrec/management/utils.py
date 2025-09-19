@@ -40,7 +40,7 @@ def enable_warnings() -> None:
     warnings.showwarning = _original_showwarning
 
 
-console = Console(stderr=True)
+console = Console(file=sys.stderr, stderr=True)
 
 
 def rich_sink(message) -> None:  # noqa: ANN001
