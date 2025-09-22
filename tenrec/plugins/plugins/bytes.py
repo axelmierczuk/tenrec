@@ -423,7 +423,10 @@ class BytesPlugin(PluginBase):
             msg = "Pattern must be a hex string (e.g., '9090' for two NOPs)"
             raise OperationError(msg)
 
-        result = self.database.bytes.find_bytes_between(pattern, start_ea.ea_t, end_ea.ea_t)
+        start_ea = start_ea.ea_t if start_ea is not None else None
+        end_ea = end_ea.ea_t if end_ea is not None else None
+
+        result = self.database.bytes.find_bytes_between(pattern, start_ea, end_ea)
         if result is None:
             msg = f"Could not find byte pattern '{pattern}' in database"
             raise OperationError(msg)
@@ -439,7 +442,10 @@ class BytesPlugin(PluginBase):
         :return: HexEA address of instruction containing the immediate.
         :raises OperationException: If immediate value not found.
         """
-        result = self.database.bytes.find_immediate_between(value, start_ea.ea_t, end_ea.ea_t)
+        start_ea = start_ea.ea_t if start_ea is not None else None
+        end_ea = end_ea.ea_t if end_ea is not None else None
+
+        result = self.database.bytes.find_immediate_between(value, start_ea, end_ea)
         if result is None:
             msg = f"Could not find byte pattern '{value}' in database"
             raise OperationError(msg)
@@ -447,7 +453,7 @@ class BytesPlugin(PluginBase):
 
     @operation()
     def find_text_between(
-        self, text: str, start_ea: HexEA, end_ea: HexEA, flags: SearchFlags = SearchFlags.DOWN
+        self, text: str, start_ea: HexEA = None, end_ea: HexEA = None, flags: SearchFlags = SearchFlags.DOWN
     ) -> HexEA:
         """Search for text string in disassembly, comments, or data.
 
@@ -458,7 +464,10 @@ class BytesPlugin(PluginBase):
         :return: HexEA address where text was found.
         :raises OperationException: If text not found.
         """
-        result = self.database.bytes.find_text_between(text, start_ea.ea_t, end_ea.ea_t, flags)
+        start_ea = start_ea.ea_t if start_ea is not None else None
+        end_ea = end_ea.ea_t if end_ea is not None else None
+
+        result = self.database.bytes.find_text_between(text, start_ea, end_ea, flags)
         if result is None:
             msg = f"Could not find text '{text}' in database between '{start_ea}' and '{end_ea}'"
             raise OperationError(msg)
