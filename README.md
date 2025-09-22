@@ -137,6 +137,8 @@ Currently, the following clients are supported:
 - [Claude Code](https://www.anthropic.com/claude-code)
 - [LM Studio](https://lmstudio.ai/)
 
+Additional clients like [Cortex](https://github.com/openai/codex) can be used as well, but require manual installation at the moment.
+
 Get started with the install command:
 
 ```bash
@@ -168,6 +170,116 @@ tenrec install
 ╰──────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
+</details>
+
+<details>
+<summary><b>Manual installation for Codex</summary>
+
+
+tenrec can also be used with other LLM clients like Codex, even if these are not yet supported by the `install` command.
+
+The following step by step installation guide shows how to use Codex with tenrec and the GPT4.1 LLM via AzureAI and API key authentication on Linux. [Azure OpenAI in Codex](https://devblogs.microsoft.com/all-things-azure/codex-azure-openai-integration-fast-secure-code-development/). Please note that AzureAI API keys are different from OpenAI API keys. Ensure that you deployed your AzureID resource in one of the supported regions for [Responses API](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/responses?tabs=python-secure#region-availability)
+
+
+In order to use tenrec with Codex proceed as follows:
+
+  * Download the latest Codex release from https://github.com/openai/codex/releases (We're using 0.39.0 in the Linux x86_64-unknown-gnu.tar.gz version)
+  * Unpack at the place of your choice with: `tar --zstd -xvf codex-x86_64-unknown-linux-gnu.tar.gz`
+  * Make it executable via: `chmod +x codex-x86_64-unknown-lunux`
+  * Create a new venv for tenrec and install it there as recent distributions no longer allow you to install pip packages systemwide
+    ```
+    cd /home/user/develop/ai/tenrec
+    python3 -m venv venv
+    source venv/bin/activate
+    pip3 install tenrec
+    pip3 install uv
+    ```
+
+  * Deploy the GPT-4.1 model in your Azure OpenAI workspace:
+    
+    See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/create-resource?pivots=web-portal for details. Make sure you are using a supported region for the [Responses API](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/responses?tabs=python-secure#region-availability)
+
+  * Create the codex configuration file in `~/.codex/config.toml` with the following content
+
+    ```
+    # Set the default model and provider
+    model = "gpt-4.1" 
+    model_provider = "azure"
+    preferred_auth_method = "apikey"
+
+    # Configure the Azure provider
+    [model_providers.azure]
+    name = "Azure"
+    # Make sure you set the appropriate subdomain for this URL.
+    base_url = "https://<your_azure_ai_deployment>.openai.azure.com/openai"
+    env_key = "AZURE_OPENAI_API_KEY"
+    query_params = { api-version = "2025-04-01-preview" }
+    wire_api = "responses"
+    model_reasoning_effort = "high"
+
+    [projects."/tmp"]
+    trust_level = "trusted"
+
+    [mcp_servers.tenrec]
+    command = "/home/user/develop/ai/tenrec/venv/bin/uvx"
+    args = ["tenrec", "run"]
+    env = { "IDADIR"="/home/user/ida-essential-9.2" }
+
+
+  * Set the environment variable AZURE_OPENAI_API_KEY
+
+    You will find the API Key in the Azure AIFoundry Overview page for your deployed resource.
+
+    `export AZURE_OPENAI_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+
+    The exported variable must match the name for `env_key` in the config.toml file.
+
+    Keep this API key secret.
+
+  * Test it
+
+    `codex-x86_64-unknown-linux "Write me a Haiku"`
+    ```
+
+    ╭────────────────────────────────────────────────────────╮
+    │ >_ OpenAI Codex (v0.39.0)                              │
+    │                                                        │
+    │ model:     gpt-4.1   /model to change                  │
+    │ directory: /tmp                                        │
+    ╰────────────────────────────────────────────────────────╯
+
+      To get started, describe a task or try one of these commands:
+
+      /init - create an AGENTS.md file with instructions for Codex
+      /status - show current session configuration
+      /approvals - choose what Codex can do without approval
+      /model - choose what model and reasoning effort to use
+
+    ▌ Write me a Haiku
+
+    > Gentle morning light
+      Whispers through the waking trees
+      Hope blooms with the dawn
+
+    ▌ Find and fix a bug in @filename                                                                                                                                            
+
+    ⏎ send   Ctrl+J newline   Ctrl+T transcript   Ctrl+C quit   14.0K tokens used   99% context left                                                                             
+    ```
+
+    If you receive a response without error, Codex has been setup correctly with AzureAI.
+
+  * Test tenrec in Codex
+
+    Use codex with the same demo prompt above. Copy darn_mice.exe to /tmp and run
+
+    `codex "You have been provided with the binary called darn_mice.exe in the /tmp directory. Use 
+tenrec to open a session and reverse the binary. Focus on getting a high-level 
+understanding of the application by finding entry points, and tracing execution flow. 
+Make sure to rename variables and functions as you work through the binary. The xref 
+plugin can be helpful in this task. You will ultimately be looking for a flag. The flag 
+is formatted in an email format, and may require decryption. Do not try to guess the 
+flag, use your analysis to guide you towards the correct answer based on the binary."`
+ 
 </details>
 
 ### run

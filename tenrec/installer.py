@@ -38,7 +38,7 @@ class ConfigTarget(Enum):
             claude_prefix = support
         elif sys.platform == "linux":
             code_prefix = home / ".config" / "Code" / "User" / "globalStorage"
-            claude_prefix = None  # not supported
+            claude_prefix = home / ".config" # Installer provided by https://github.com/aaddrick/claude-desktop-debian 
         else:
             return None
 
