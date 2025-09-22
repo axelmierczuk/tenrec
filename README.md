@@ -173,7 +173,7 @@ tenrec install
 </details>
 
 <details>
-<summary><b>Manual installation for Codex</summary>
+<summary><b>Manual installation for Codex</b></summary>
 
 
 tenrec can also be used with other LLM clients like Codex, even if these are not yet supported by the `install` command.
