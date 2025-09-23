@@ -114,7 +114,12 @@ class BytesPlugin(PluginBase):
         :param alignment: Power of 2 alignment (for "alignment").
         :return: True if data was successfully defined, False otherwise.
         """
-        data_type = DataType(data_type)
+        try:
+            data_type_enum = DataType(data_type)
+        except ValueError:
+            msg = f"Invalid data_type '{data_type}'. Must be one of: {[dt.name for dt in DataType]}"
+            raise OperationError(msg)
+        data_type = data_type_enum
         match data_type:
             case DataType.BYTE:
                 return self.database.bytes.create_byte_at(address.ea_t, count, force)
