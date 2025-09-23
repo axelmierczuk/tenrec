@@ -290,7 +290,11 @@ class BytesPlugin(PluginBase):
             else:
                 data_type = DataType.QWORD
         else:
-            data_type = DataType(data_type)
+            try:
+                data_type = DataType(data_type)
+            except ValueError:
+                msg = f"Unsupported data type for patching: {data_type}"
+                raise OperationError(msg)
 
         match data_type:
             case DataType.BYTE:
