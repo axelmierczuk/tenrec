@@ -47,8 +47,8 @@ Check if specific byte flags are set at an address.
 
 ```function
 def bytes_create_data_at(
-    ea: HexEA,
-    data_type: DataType,
+    address: HexEA,
+    data_type: Literal[byte, word, dword, qword, oword, yword, zword, tbyte, float, double, packed_real, string, struct, alignment],
     count: int = 1,
     force: bool = False,
     length: int | None = None,
@@ -60,37 +60,23 @@ def bytes_create_data_at(
 Create data items of specified type at consecutive addresses.
 
 **Args:**
-- **<span class='parameter'>ea</span>** (**<span class='return-type'>HexEA</span>**): Starting address for data definitions.
-- **<span class='parameter'>data_type</span>** (**<span class='return-type'>DataType</span>**): Type of data to create (DataType enum). Options are:
-	 - `BYTE`: *byte (1 byte)*
-	 - `WORD`: *word (2 bytes)*
-	 - `DWORD`: *dword (4 bytes)*
-	 - `QWORD`: *qword (8 bytes)*
-	 - `OWORD`: *oword (16 bytes)*
-	 - `YWORD`: *yword (32 bytes)*
-	 - `ZWORD`: *zword (48 bytes)*
-	 - `TBYTE`: *tbyte (10 bytes)*
-	 - `FLOAT`: *float (4 bytes)*
-	 - `DOUBLE`: *double (8 bytes)*
-	 - `PACKED_REAL`: *packed_real (10 bytes)*
-	 - `STRING`: *string (variable length, requires length parameter)*
-	 - `STRUCT`: *struct (requires tid parameter for structure type)*
-	 - `ALIGNMENT`: *alignment (requires length or alignment parameter)*
+- **<span class='parameter'>address</span>** (**<span class='return-type'>HexEA</span>**): Starting address for data definitions.
+- **<span class='parameter'>data_type</span>** (**<span class='return-type'>Literal[byte, word, dword, qword, oword, yword, zword, tbyte, float, double, packed_real, string, struct, alignment]</span>**): Type of data to create (DataTypeLiteral).
 - **<span class='parameter'>count</span>** (**<span class='return-type'>int</span>**): Number of consecutive elements to create.
 - **<span class='parameter'>force</span>** (**<span class='return-type'>bool</span>**): Override existing data definitions if True.
 - **<span class='parameter'>length</span>** (**<span class='return-type'>int | None</span>**): Length parameter for strings and alignment types.
-- **<span class='parameter'>string_type</span>** (**<span class='return-type'>StringType</span>**): String encoding type (for DataType.STRING). Options are:
-	 - `C`: *0 (C-style null-terminated string, default)*
-	 - `C_16`: *1 (C-style 16-bit string)*
-	 - `C_32`: *2 (C-style 32-bit string)*
-	 - `PASCAL`: *4 (Pascal-style string)*
-	 - `PASCAL_16`: *5 (Pascal-style 16-bit string)*
-	 - `PASCAL_32`: *6 (Pascal-style 32-bit string)*
-	 - `LEN2`: *8 (String with 2-byte length prefix)*
-	 - `LEN2_16`: *9 (16-bit string with 2-byte length prefix)*
-	 - `LEN2_32`: *10 (32-bit string with 2-byte length prefix)*
-- **<span class='parameter'>tid</span>** (**<span class='return-type'>int | None</span>**): Structure type ID (for DataType.STRUCT).
-- **<span class='parameter'>alignment</span>** (**<span class='return-type'>int</span>**): Power of 2 alignment (for DataType.ALIGNMENT).
+- **<span class='parameter'>string_type</span>** (**<span class='return-type'>StringType</span>**): String encoding type (for "string"). Options are:
+	 - `0`: *C-style null-terminated string, default*
+	 - `1`: *C-style 16-bit string*
+	 - `2`: *C-style 32-bit string*
+	 - `4`: *Pascal-style string*
+	 - `5`: *Pascal-style 16-bit string*
+	 - `6`: *Pascal-style 32-bit string*
+	 - `8`: *String with 2-byte length prefix*
+	 - `9`: *16-bit string with 2-byte length prefix*
+	 - `10`: *32-bit string with 2-byte length prefix*
+- **<span class='parameter'>tid</span>** (**<span class='return-type'>int | None</span>**): Structure type ID (for "struct").
+- **<span class='parameter'>alignment</span>** (**<span class='return-type'>int</span>**): Power of 2 alignment (for "alignment").
 
 **Returns:**
 - **<span class='return-type'>bool</span>**: True if data was successfully defined, False otherwise.
@@ -302,15 +288,15 @@ Gets the original bytes before any patches by reading individual bytes.
 
 ```function
 def bytes_get_original_value_at(
-    ea: HexEA,
-    data_type: DataType
+    address: HexEA,
+    data_type: Literal[byte, word, dword, qword]
 ) -> int:
 ```
 Get original value (before patching) at address.
 
 **Args:**
-- **<span class='parameter'>ea</span>** (**<span class='return-type'>HexEA</span>**): The effective address.
-- **<span class='parameter'>data_type</span>** (**<span class='return-type'>DataType</span>**): Type of data to read (DataType enum).
+- **<span class='parameter'>address</span>** (**<span class='return-type'>HexEA</span>**): The effective address.
+- **<span class='parameter'>data_type</span>** (**<span class='return-type'>Literal[byte, word, dword, qword]</span>**): Type of data to read (DataType enum).
 
 **Returns:**
 - **<span class='return-type'>int</span>**: The original value.
@@ -352,30 +338,16 @@ Gets the previous head (start of data item) before the specified address.
 
 ```function
 def bytes_get_value_at(
-    ea: HexEA,
-    data_type: DataType,
+    address: HexEA,
+    data_type: Literal[byte, word, dword, qword, float, double, string],
     allow_uninitialized: bool = False
 ) -> int | float | str:
 ```
 Read a value of specified type from memory.
 
 **Args:**
-- **<span class='parameter'>ea</span>** (**<span class='return-type'>HexEA</span>**): The effective address to read from.
-- **<span class='parameter'>data_type</span>** (**<span class='return-type'>DataType</span>**): Type of data to create (DataType enum). Options are:
-	 - `BYTE`: *byte (1 byte)*
-	 - `WORD`: *word (2 bytes)*
-	 - `DWORD`: *dword (4 bytes)*
-	 - `QWORD`: *qword (8 bytes)*
-	 - `OWORD`: *oword (16 bytes)*
-	 - `YWORD`: *yword (32 bytes)*
-	 - `ZWORD`: *zword (48 bytes)*
-	 - `TBYTE`: *tbyte (10 bytes)*
-	 - `FLOAT`: *float (4 bytes)*
-	 - `DOUBLE`: *double (8 bytes)*
-	 - `PACKED_REAL`: *packed_real (10 bytes)*
-	 - `STRING`: *string (variable length, requires length parameter)*
-	 - `STRUCT`: *struct (requires tid parameter for structure type)*
-	 - `ALIGNMENT`: *alignment (requires length or alignment parameter)*
+- **<span class='parameter'>address</span>** (**<span class='return-type'>HexEA</span>**): The effective address to read from.
+- **<span class='parameter'>data_type</span>** (**<span class='return-type'>Literal[byte, word, dword, qword, float, double, string]</span>**): Type of data to create.
 - **<span class='parameter'>allow_uninitialized</span>** (**<span class='return-type'>bool</span>**): Allow reading uninitialized memory if True.
 
 **Returns:**
@@ -531,29 +503,15 @@ Check if address is a tail byte (continuation of multi-byte item).
 
 ```function
 def bytes_is_type_at(
-    ea: HexEA,
-    data_type: DataType
+    address: HexEA,
+    data_type: Literal[byte, word, dword, qword, oword, yword, zword, tbyte, float, double, packed_real, string, struct, alignment]
 ) -> bool:
 ```
 Check if address contains a specific data type.
 
 **Args:**
-- **<span class='parameter'>ea</span>** (**<span class='return-type'>HexEA</span>**): The effective address to check.
-- **<span class='parameter'>data_type</span>** (**<span class='return-type'>DataType</span>**): Type of data to create (DataType enum). Options are:
-	 - `BYTE`: *byte (1 byte)*
-	 - `WORD`: *word (2 bytes)*
-	 - `DWORD`: *dword (4 bytes)*
-	 - `QWORD`: *qword (8 bytes)*
-	 - `OWORD`: *oword (16 bytes)*
-	 - `YWORD`: *yword (32 bytes)*
-	 - `ZWORD`: *zword (48 bytes)*
-	 - `TBYTE`: *tbyte (10 bytes)*
-	 - `FLOAT`: *float (4 bytes)*
-	 - `DOUBLE`: *double (8 bytes)*
-	 - `PACKED_REAL`: *packed_real (10 bytes)*
-	 - `STRING`: *string (variable length, requires length parameter)*
-	 - `STRUCT`: *struct (requires tid parameter for structure type)*
-	 - `ALIGNMENT`: *alignment (requires length or alignment parameter)*
+- **<span class='parameter'>address</span>** (**<span class='return-type'>HexEA</span>**): The effective address to check.
+- **<span class='parameter'>data_type</span>** (**<span class='return-type'>Literal[byte, word, dword, qword, oword, yword, zword, tbyte, float, double, packed_real, string, struct, alignment]</span>**): Type of data to create (DataTypeLiteral).
 
 **Returns:**
 - **<span class='return-type'>bool</span>**: True if address contains the specified type, False otherwise.
@@ -591,17 +549,17 @@ Check if the value at the specified address is initialized.
 
 ```function
 def bytes_patch_value_at(
-    ea: HexEA,
+    address: HexEA,
     value: int | bytes,
-    data_type: DataType = None
+    data_type: Optional[Literal[byte, word, dword, qword]] = None
 ) -> bool:
 ```
 Patch a value in the database (original value is preserved).
 
 **Args:**
-- **<span class='parameter'>ea</span>** (**<span class='return-type'>HexEA</span>**): Address to patch.
+- **<span class='parameter'>address</span>** (**<span class='return-type'>HexEA</span>**): Address to patch.
 - **<span class='parameter'>value</span>** (**<span class='return-type'>int | bytes</span>**): New value to write.
-- **<span class='parameter'>data_type</span>** (**<span class='return-type'>DataType</span>**): Type of data to patch (auto-detect from value if None).
+- **<span class='parameter'>data_type</span>** (**<span class='return-type'>Optional[Literal[byte, word, dword, qword]]</span>**): Type of data to patch (auto-detect from value if None).
 
 **Returns:**
 - **<span class='return-type'>bool</span>**: True if patch applied, False otherwise.
@@ -625,17 +583,17 @@ Revert patched byte to its original value.
 
 ```function
 def bytes_set_value_at(
-    ea: HexEA,
+    address: HexEA,
     value: int | bytes,
-    data_type: DataType = None
+    data_type: Optional[Literal[byte, word, dword, qword]] = None
 ) -> bool:
 ```
 Set a value at the specified address.
 
 **Args:**
-- **<span class='parameter'>ea</span>** (**<span class='return-type'>HexEA</span>**): The effective address.
+- **<span class='parameter'>address</span>** (**<span class='return-type'>HexEA</span>**): The effective address.
 - **<span class='parameter'>value</span>** (**<span class='return-type'>int | bytes</span>**): Value to set.
-- **<span class='parameter'>data_type</span>** (**<span class='return-type'>DataType</span>**): Type of data to set (auto-detect from value if None).
+- **<span class='parameter'>data_type</span>** (**<span class='return-type'>Optional[Literal[byte, word, dword, qword]]</span>**): Type of data to set (auto-detect from value if None).
 
 **Returns:**
 - **<span class='return-type'>bool</span>**: True if successful, False otherwise.
