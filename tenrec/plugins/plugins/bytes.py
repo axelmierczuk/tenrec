@@ -231,8 +231,11 @@ class BytesPlugin(PluginBase):
         :param data_type: Type of data to create (DataTypeLiteral).
         :return: True if address contains the specified type, False otherwise.
         """
-        data_type = DataType(data_type)
-        match data_type:
+        try:
+            data_type_enum = DataType(data_type)
+        except ValueError:
+            raise OperationError(f"Invalid data_type value: {data_type!r}")
+        match data_type_enum:
             case DataType.BYTE:
                 return self.database.bytes.is_byte_at(address.ea_t)
             case DataType.WORD:
