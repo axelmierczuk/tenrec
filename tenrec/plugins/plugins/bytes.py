@@ -168,7 +168,11 @@ class BytesPlugin(PluginBase):
         :param allow_uninitialized: Allow reading uninitialized memory if True.
         :return: Value read from memory (type depends on data_type).
         """
-        data_type = DataType(data_type)
+        try:
+            data_type = DataType(data_type)
+        except ValueError:
+            msg = f"Unsupported data type for reading: {data_type}"
+            raise OperationError(msg)
         match data_type:
             case DataType.BYTE:
                 return self.database.bytes.get_byte_at(address.ea_t, allow_uninitialized)
