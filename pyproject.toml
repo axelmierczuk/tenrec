@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tenrec"
-version = "0.1.8"
+version = "1.0.0"
 description = "A modern MCP server implementation for IDA Pro using ida-domain and FastMCP."
 readme = "README.md"
 license = {text = "MIT"}
@@ -23,7 +23,7 @@ dependencies = [
     "gitpython>=3.1.45",
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
