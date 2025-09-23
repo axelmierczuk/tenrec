@@ -60,7 +60,10 @@ For a complete breakdown of available plugins and their operations, check out th
 ## Demo
 
 Using tenrec and Claude Code, we were able to solve Challenge 4 from Flare-On 9 (darn mice) with a single prompt (see below).
-Find the complete challenge write-up [here](https://services.google.com/fh/files/misc/04-darn-mice.pdf).
+Find the complete challenge write-up [here](https://services.google.com/fh/files/misc/04-darn-mice.pdf). 
+
+To test this yourself, checkout the [fareedfauzi/Flare-On-Challenges](https://github.com/fareedfauzi/Flare-On-Challenges)
+repo for the binary and additional resources.
 
 
 > You have been provided with the binary called darn_mice.exe in the current directory. Use 
@@ -186,15 +189,6 @@ In order to use tenrec with Codex proceed as follows:
   * Download the latest Codex release from https://github.com/openai/codex/releases (We're using 0.39.0 in the Linux x86_64-unknown-gnu.tar.gz version)
   * Unpack at the place of your choice with: `tar --zstd -xvf codex-x86_64-unknown-linux-gnu.tar.gz`
   * Make it executable via: `chmod +x codex-x86_64-unknown-lunux`
-  * Create a new venv for tenrec and install it there as recent distributions no longer allow you to install pip packages systemwide
-    ```
-    cd /home/user/develop/ai/tenrec
-    python3 -m venv venv
-    source venv/bin/activate
-    pip3 install tenrec
-    pip3 install uv
-    ```
-
   * Deploy the GPT-4.1 model in your Azure OpenAI workspace:
     
     See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/create-resource?pivots=web-portal for details. Make sure you are using a supported region for the [Responses API](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/responses?tabs=python-secure#region-availability)
@@ -221,7 +215,7 @@ In order to use tenrec with Codex proceed as follows:
     trust_level = "trusted"
 
     [mcp_servers.tenrec]
-    command = "/home/user/develop/ai/tenrec/venv/bin/uvx"
+    command = "uvx"
     args = ["tenrec", "run"]
     env = { "IDADIR"="/home/user/ida-essential-9.2" }
 
@@ -279,6 +273,7 @@ Make sure to rename variables and functions as you work through the binary. The 
 plugin can be helpful in this task. You will ultimately be looking for a flag. The flag 
 is formatted in an email format, and may require decryption. Do not try to guess the 
 flag, use your analysis to guide you towards the correct answer based on the binary."`
+
  
 </details>
 

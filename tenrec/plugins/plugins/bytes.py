@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Literal
 
 from ida_domain.bytes import ByteFlags, SearchFlags
 from ida_domain.strings import StringType
@@ -68,8 +69,23 @@ class BytesPlugin(PluginBase):
     @operation()
     def create_data_at(
         self,
-        ea: HexEA,
-        data_type: DataType,
+        address: HexEA,
+        data_type: Literal[
+            "byte",
+            "word",
+            "dword",
+            "qword",
+            "oword",
+            "yword",
+            "zword",
+            "tbyte",
+            "float",
+            "double",
+            "packed_real",
+            "string",
+            "struct",
+            "alignment",
+        ],
         count: int = 1,
         force: bool = False,
         length: int | None = None,
@@ -79,124 +95,109 @@ class BytesPlugin(PluginBase):
     ) -> bool:
         """Create data items of specified type at consecutive addresses.
 
-        :param ea: Starting address for data definitions.
-        :param data_type: Type of data to create (DataType enum). Options are:
-            `BYTE`: *byte (1 byte)*
-            `WORD`: *word (2 bytes)*
-            `DWORD`: *dword (4 bytes)*
-            `QWORD`: *qword (8 bytes)*
-            `OWORD`: *oword (16 bytes)*
-            `YWORD`: *yword (32 bytes)*
-            `ZWORD`: *zword (48 bytes)*
-            `TBYTE`: *tbyte (10 bytes)*
-            `FLOAT`: *float (4 bytes)*
-            `DOUBLE`: *double (8 bytes)*
-            `PACKED_REAL`: *packed_real (10 bytes)*
-            `STRING`: *string (variable length, requires length parameter)*
-            `STRUCT`: *struct (requires tid parameter for structure type)*
-            `ALIGNMENT`: *alignment (requires length or alignment parameter)*
+        :param address: Starting address for data definitions.
+        :param data_type: Type of data to create (DataTypeLiteral).
         :param count: Number of consecutive elements to create.
         :param force: Override existing data definitions if True.
         :param length: Length parameter for strings and alignment types.
-        :param string_type: String encoding type (for DataType.STRING). Options are:
-            `C`: *0 (C-style null-terminated string, default)*
-            `C_16`: *1 (C-style 16-bit string)*
-            `C_32`: *2 (C-style 32-bit string)*
-            `PASCAL`: *4 (Pascal-style string)*
-            `PASCAL_16`: *5 (Pascal-style 16-bit string)*
-            `PASCAL_32`: *6 (Pascal-style 32-bit string)*
-            `LEN2`: *8 (String with 2-byte length prefix)*
-            `LEN2_16`: *9 (16-bit string with 2-byte length prefix)*
-            `LEN2_32`: *10 (32-bit string with 2-byte length prefix)*
-        :param tid: Structure type ID (for DataType.STRUCT).
-        :param alignment: Power of 2 alignment (for DataType.ALIGNMENT).
+        :param string_type: String encoding type (for "string"). Options are:
+            `0`: *C-style null-terminated string, default*
+            `1`: *C-style 16-bit string*
+            `2`: *C-style 32-bit string*
+            `4`: *Pascal-style string*
+            `5`: *Pascal-style 16-bit string*
+            `6`: *Pascal-style 32-bit string*
+            `8`: *String with 2-byte length prefix*
+            `9`: *16-bit string with 2-byte length prefix*
+            `10`: *32-bit string with 2-byte length prefix*
+        :param tid: Structure type ID (for "struct").
+        :param alignment: Power of 2 alignment (for "alignment").
         :return: True if data was successfully defined, False otherwise.
         """
+        try:
+            data_type_enum = DataType(data_type)
+        except ValueError:
+            msg = f"Invalid data_type '{data_type}'. Must be one of: {[dt.name for dt in DataType]}"
+            raise OperationError(msg)
+        data_type = data_type_enum
         match data_type:
             case DataType.BYTE:
-                return self.database.bytes.create_byte_at(ea.ea_t, count, force)
+                return self.database.bytes.create_byte_at(address.ea_t, count, force)
             case DataType.WORD:
-                return self.database.bytes.create_word_at(ea.ea_t, count, force)
+                return self.database.bytes.create_word_at(address.ea_t, count, force)
             case DataType.DWORD:
-                return self.database.bytes.create_dword_at(ea.ea_t, count, force)
+                return self.database.bytes.create_dword_at(address.ea_t, count, force)
             case DataType.QWORD:
-                return self.database.bytes.create_qword_at(ea.ea_t, count, force)
+                return self.database.bytes.create_qword_at(address.ea_t, count, force)
             case DataType.OWORD:
-                return self.database.bytes.create_oword_at(ea.ea_t, count, force)
+                return self.database.bytes.create_oword_at(address.ea_t, count, force)
             case DataType.YWORD:
-                return self.database.bytes.create_yword_at(ea.ea_t, count, force)
+                return self.database.bytes.create_yword_at(address.ea_t, count, force)
             case DataType.ZWORD:
-                return self.database.bytes.create_zword_at(ea.ea_t, count, force)
+                return self.database.bytes.create_zword_at(address.ea_t, count, force)
             case DataType.TBYTE:
-                return self.database.bytes.create_tbyte_at(ea.ea_t, count, force)
+                return self.database.bytes.create_tbyte_at(address.ea_t, count, force)
             case DataType.FLOAT:
-                return self.database.bytes.create_float_at(ea.ea_t, count, force)
+                return self.database.bytes.create_float_at(address.ea_t, count, force)
             case DataType.DOUBLE:
-                return self.database.bytes.create_double_at(ea.ea_t, count, force)
+                return self.database.bytes.create_double_at(address.ea_t, count, force)
             case DataType.PACKED_REAL:
-                return self.database.bytes.create_packed_real_at(ea.ea_t, count, force)
+                return self.database.bytes.create_packed_real_at(address.ea_t, count, force)
             case DataType.STRING:
-                return self.database.bytes.create_string_at(ea.ea_t, length, string_type)
+                return self.database.bytes.create_string_at(address.ea_t, length, string_type)
             case DataType.STRUCT:
                 if tid is None:
                     msg = "tid parameter required for struct creation"
                     raise OperationError(msg)
-                return self.database.bytes.create_struct_at(ea.ea_t, count, tid, force)
+                return self.database.bytes.create_struct_at(address.ea_t, count, tid, force)
             case DataType.ALIGNMENT:
                 length_val = length if length is not None else 0
-                return self.database.bytes.create_alignment_at(ea.ea_t, length_val, alignment)
-            case _:
-                msg = f"Unsupported data type: {data_type}"
-                raise OperationError(msg)
+                return self.database.bytes.create_alignment_at(address.ea_t, length_val, alignment)
 
     @operation()
-    def get_value_at(self, ea: HexEA, data_type: DataType, allow_uninitialized: bool = False) -> int | float | str:
+    def get_value_at(
+        self,
+        address: HexEA,
+        data_type: Literal["byte", "word", "dword", "qword", "float", "double", "string"],
+        allow_uninitialized: bool = False,
+    ) -> int | float | str:
         """Read a value of specified type from memory.
 
-        :param ea: The effective address to read from.
-        :param data_type: Type of data to create (DataType enum). Options are:
-            `BYTE`: *byte (1 byte)*
-            `WORD`: *word (2 bytes)*
-            `DWORD`: *dword (4 bytes)*
-            `QWORD`: *qword (8 bytes)*
-            `OWORD`: *oword (16 bytes)*
-            `YWORD`: *yword (32 bytes)*
-            `ZWORD`: *zword (48 bytes)*
-            `TBYTE`: *tbyte (10 bytes)*
-            `FLOAT`: *float (4 bytes)*
-            `DOUBLE`: *double (8 bytes)*
-            `PACKED_REAL`: *packed_real (10 bytes)*
-            `STRING`: *string (variable length, requires length parameter)*
-            `STRUCT`: *struct (requires tid parameter for structure type)*
-            `ALIGNMENT`: *alignment (requires length or alignment parameter)*
+        :param address: The effective address to read from.
+        :param data_type: Type of data to create.
         :param allow_uninitialized: Allow reading uninitialized memory if True.
         :return: Value read from memory (type depends on data_type).
         """
+        try:
+            data_type = DataType(data_type)
+        except ValueError:
+            msg = f"Unsupported data type for reading: {data_type}"
+            raise OperationError(msg)
         match data_type:
             case DataType.BYTE:
-                return self.database.bytes.get_byte_at(ea.ea_t, allow_uninitialized)
+                return self.database.bytes.get_byte_at(address.ea_t, allow_uninitialized)
             case DataType.WORD:
-                return self.database.bytes.get_word_at(ea.ea_t, allow_uninitialized)
+                return self.database.bytes.get_word_at(address.ea_t, allow_uninitialized)
             case DataType.DWORD:
-                return self.database.bytes.get_dword_at(ea.ea_t, allow_uninitialized)
+                return self.database.bytes.get_dword_at(address.ea_t, allow_uninitialized)
             case DataType.QWORD:
-                return self.database.bytes.get_qword_at(ea.ea_t, allow_uninitialized)
+                return self.database.bytes.get_qword_at(address.ea_t, allow_uninitialized)
             case DataType.FLOAT:
-                result = self.database.bytes.get_float_at(ea.ea_t, allow_uninitialized)
+                result = self.database.bytes.get_float_at(address.ea_t, allow_uninitialized)
                 if result is None:
-                    msg = f"Could not get float at '{ea}' in database"
+                    msg = f"Could not get float at '{address}' in database"
                     raise OperationError(msg)
                 return result
             case DataType.DOUBLE:
-                result = self.database.bytes.get_double_at(ea.ea_t, allow_uninitialized)
+                result = self.database.bytes.get_double_at(address.ea_t, allow_uninitialized)
                 if result is None:
-                    msg = f"Could not get double at '{ea}' in database"
+                    msg = f"Could not get double at '{address}' in database"
                     raise OperationError(msg)
                 return result
             case DataType.STRING:
-                result = self.database.bytes.get_string_at(ea.ea_t)
+                result = self.database.bytes.get_string_at(address.ea_t)
                 if result is None:
-                    msg = f"Could not get string at '{ea}' in database"
+                    msg = f"Could not get string at '{address}' in database"
                     raise OperationError(msg)
                 return result
             case _:
@@ -204,68 +205,79 @@ class BytesPlugin(PluginBase):
                 raise OperationError(msg)
 
     @operation()
-    def is_type_at(self, ea: HexEA, data_type: DataType) -> bool:
+    def is_type_at(
+        self,
+        address: HexEA,
+        data_type: Literal[
+            "byte",
+            "word",
+            "dword",
+            "qword",
+            "oword",
+            "yword",
+            "zword",
+            "tbyte",
+            "float",
+            "double",
+            "packed_real",
+            "string",
+            "struct",
+            "alignment",
+        ],
+    ) -> bool:
         """Check if address contains a specific data type.
 
-        :param ea: The effective address to check.
-        :param data_type: Type of data to create (DataType enum). Options are:
-            `BYTE`: *byte (1 byte)*
-            `WORD`: *word (2 bytes)*
-            `DWORD`: *dword (4 bytes)*
-            `QWORD`: *qword (8 bytes)*
-            `OWORD`: *oword (16 bytes)*
-            `YWORD`: *yword (32 bytes)*
-            `ZWORD`: *zword (48 bytes)*
-            `TBYTE`: *tbyte (10 bytes)*
-            `FLOAT`: *float (4 bytes)*
-            `DOUBLE`: *double (8 bytes)*
-            `PACKED_REAL`: *packed_real (10 bytes)*
-            `STRING`: *string (variable length, requires length parameter)*
-            `STRUCT`: *struct (requires tid parameter for structure type)*
-            `ALIGNMENT`: *alignment (requires length or alignment parameter)*
+        :param address: The effective address to check.
+        :param data_type: Type of data to create (DataTypeLiteral).
         :return: True if address contains the specified type, False otherwise.
         """
-        match data_type:
+        try:
+            data_type_enum = DataType(data_type)
+        except ValueError:
+            raise OperationError(f"Invalid data_type value: {data_type!r}")
+        match data_type_enum:
             case DataType.BYTE:
-                return self.database.bytes.is_byte_at(ea.ea_t)
+                return self.database.bytes.is_byte_at(address.ea_t)
             case DataType.WORD:
-                return self.database.bytes.is_word_at(ea.ea_t)
+                return self.database.bytes.is_word_at(address.ea_t)
             case DataType.DWORD:
-                return self.database.bytes.is_dword_at(ea.ea_t)
+                return self.database.bytes.is_dword_at(address.ea_t)
             case DataType.QWORD:
-                return self.database.bytes.is_qword_at(ea.ea_t)
+                return self.database.bytes.is_qword_at(address.ea_t)
             case DataType.OWORD:
-                return self.database.bytes.is_oword_at(ea.ea_t)
+                return self.database.bytes.is_oword_at(address.ea_t)
             case DataType.YWORD:
-                return self.database.bytes.is_yword_at(ea.ea_t)
+                return self.database.bytes.is_yword_at(address.ea_t)
             case DataType.ZWORD:
-                return self.database.bytes.is_zword_at(ea.ea_t)
+                return self.database.bytes.is_zword_at(address.ea_t)
             case DataType.TBYTE:
-                return self.database.bytes.is_tbyte_at(ea.ea_t)
+                return self.database.bytes.is_tbyte_at(address.ea_t)
             case DataType.FLOAT:
-                return self.database.bytes.is_float_at(ea.ea_t)
+                return self.database.bytes.is_float_at(address.ea_t)
             case DataType.DOUBLE:
-                return self.database.bytes.is_double_at(ea.ea_t)
+                return self.database.bytes.is_double_at(address.ea_t)
             case DataType.PACKED_REAL:
-                return self.database.bytes.is_packed_real_at(ea.ea_t)
+                return self.database.bytes.is_packed_real_at(address.ea_t)
             case DataType.STRING:
-                return self.database.bytes.is_string_literal_at(ea.ea_t)
+                return self.database.bytes.is_string_literal_at(address.ea_t)
             case DataType.STRUCT:
-                return self.database.bytes.is_struct_at(ea.ea_t)
+                return self.database.bytes.is_struct_at(address.ea_t)
             case DataType.ALIGNMENT:
-                return self.database.bytes.is_alignment_at(ea.ea_t)
+                return self.database.bytes.is_alignment_at(address.ea_t)
 
     @operation()
-    def patch_value_at(self, ea: HexEA, value: int | bytes, data_type: DataType = None) -> bool:
+    def patch_value_at(
+        self, address: HexEA, value: int | bytes, data_type: Literal["byte", "word", "dword", "qword"] | None = None
+    ) -> bool:
         """Patch a value in the database (original value is preserved).
 
-        :param ea: Address to patch.
+        :param address: Address to patch.
         :param value: New value to write.
         :param data_type: Type of data to patch (auto-detect from value if None).
         :return: True if patch applied, False otherwise.
         """
         if isinstance(value, bytes):
-            self.database.bytes.patch_bytes_at(ea.ea_t, value)
+            self.database.bytes.patch_bytes_at(address.ea_t, value)
             return True
 
         if data_type is None:
@@ -277,31 +289,39 @@ class BytesPlugin(PluginBase):
                 data_type = DataType.DWORD
             else:
                 data_type = DataType.QWORD
+        else:
+            try:
+                data_type = DataType(data_type)
+            except ValueError:
+                msg = f"Unsupported data type for patching: {data_type}"
+                raise OperationError(msg)
 
         match data_type:
             case DataType.BYTE:
-                return self.database.bytes.patch_byte_at(ea.ea_t, value)
+                return self.database.bytes.patch_byte_at(address.ea_t, value)
             case DataType.WORD:
-                return self.database.bytes.patch_word_at(ea.ea_t, value)
+                return self.database.bytes.patch_word_at(address.ea_t, value)
             case DataType.DWORD:
-                return self.database.bytes.patch_dword_at(ea.ea_t, value)
+                return self.database.bytes.patch_dword_at(address.ea_t, value)
             case DataType.QWORD:
-                return self.database.bytes.patch_qword_at(ea.ea_t, value)
+                return self.database.bytes.patch_qword_at(address.ea_t, value)
             case _:
                 msg = f"Unsupported data type for patching: {data_type}"
                 raise OperationError(msg)
 
     @operation()
-    def set_value_at(self, ea: HexEA, value: int | bytes, data_type: DataType = None) -> bool:
+    def set_value_at(
+        self, address: HexEA, value: int | bytes, data_type: Literal["byte", "word", "dword", "qword"] | None = None
+    ) -> bool:
         """Set a value at the specified address.
 
-        :param ea: The effective address.
+        :param address: The effective address.
         :param value: Value to set.
         :param data_type: Type of data to set (auto-detect from value if None).
         :return: True if successful, False otherwise.
         """
         if isinstance(value, bytes):
-            self.database.bytes.set_bytes_at(ea.ea_t, value)
+            self.database.bytes.set_bytes_at(address.ea_t, value)
             return True
 
         if data_type is None:
@@ -313,46 +333,53 @@ class BytesPlugin(PluginBase):
                 data_type = DataType.DWORD
             else:
                 data_type = DataType.QWORD
+        else:
+            try:
+                data_type = DataType(data_type)
+            except ValueError:
+                msg = f"Invalid data type value: {data_type}"
+                raise OperationError(msg)
 
         match data_type:
             case DataType.BYTE:
-                return self.database.bytes.set_byte_at(ea.ea_t, value)
+                return self.database.bytes.set_byte_at(address.ea_t, value)
             case DataType.WORD:
-                self.database.bytes.set_word_at(ea.ea_t, value)
+                self.database.bytes.set_word_at(address.ea_t, value)
                 return True
             case DataType.DWORD:
-                self.database.bytes.set_dword_at(ea.ea_t, value)
+                self.database.bytes.set_dword_at(address.ea_t, value)
                 return True
             case DataType.QWORD:
-                self.database.bytes.set_qword_at(ea.ea_t, value)
+                self.database.bytes.set_qword_at(address.ea_t, value)
                 return True
             case _:
                 msg = f"Unsupported data type for setting: {data_type}"
                 raise OperationError(msg)
 
     @operation()
-    def get_original_value_at(self, ea: HexEA, data_type: DataType) -> int:
+    def get_original_value_at(self, address: HexEA, data_type: Literal["byte", "word", "dword", "qword"]) -> int:
         """Get original value (before patching) at address.
 
-        :param ea: The effective address.
+        :param address: The effective address.
         :param data_type: Type of data to read (DataType enum).
         :return: The original value.
         """
         result = None
+        data_type = DataType(data_type)
         match data_type:
             case DataType.BYTE:
-                result = self.database.bytes.get_original_byte_at(ea.ea_t)
+                result = self.database.bytes.get_original_byte_at(address.ea_t)
             case DataType.WORD:
-                result = self.database.bytes.get_original_word_at(ea.ea_t)
+                result = self.database.bytes.get_original_word_at(address.ea_t)
             case DataType.DWORD:
-                result = self.database.bytes.get_original_dword_at(ea.ea_t)
+                result = self.database.bytes.get_original_dword_at(address.ea_t)
             case DataType.QWORD:
-                result = self.database.bytes.get_original_qword_at(ea.ea_t)
+                result = self.database.bytes.get_original_qword_at(address.ea_t)
             case _:
                 msg = f"Unsupported data type for getting original: {data_type}"
                 raise OperationError(msg)
         if result is None:
-            msg = f"Could not get original {data_type.value} at '{ea}' in database"
+            msg = f"Could not get original {data_type.value} at '{address}' in database"
             raise OperationError(msg)
         return result
 
@@ -394,7 +421,10 @@ class BytesPlugin(PluginBase):
             msg = "Pattern must be a hex string (e.g., '9090' for two NOPs)"
             raise OperationError(msg)
 
-        result = self.database.bytes.find_bytes_between(pattern, start_ea.ea_t, end_ea.ea_t)
+        start_ea = start_ea.ea_t if start_ea is not None else None
+        end_ea = end_ea.ea_t if end_ea is not None else None
+
+        result = self.database.bytes.find_bytes_between(pattern, start_ea, end_ea)
         if result is None:
             msg = f"Could not find byte pattern '{pattern}' in database"
             raise OperationError(msg)
@@ -410,7 +440,10 @@ class BytesPlugin(PluginBase):
         :return: HexEA address of instruction containing the immediate.
         :raises OperationException: If immediate value not found.
         """
-        result = self.database.bytes.find_immediate_between(value, start_ea.ea_t, end_ea.ea_t)
+        start_ea = start_ea.ea_t if start_ea is not None else None
+        end_ea = end_ea.ea_t if end_ea is not None else None
+
+        result = self.database.bytes.find_immediate_between(value, start_ea, end_ea)
         if result is None:
             msg = f"Could not find byte pattern '{value}' in database"
             raise OperationError(msg)
@@ -429,7 +462,10 @@ class BytesPlugin(PluginBase):
         :return: HexEA address where text was found.
         :raises OperationException: If text not found.
         """
-        result = self.database.bytes.find_text_between(text, start_ea.ea_t, end_ea.ea_t, flags)
+        start_ea = start_ea.ea_t if start_ea is not None else None
+        end_ea = end_ea.ea_t if end_ea is not None else None
+
+        result = self.database.bytes.find_text_between(text, start_ea, end_ea, flags)
         if result is None:
             msg = f"Could not find text '{text}' in database between '{start_ea}' and '{end_ea}'"
             raise OperationError(msg)

@@ -11,7 +11,6 @@ license = {text = "MIT"}
 authors = [{name = "Axel Mierczuk"}]
 requires-python = ">=3.10"
 dependencies = [
-    "cdifflib==1.2.9",
     "fastmcp>=2.12.3",
     "gunicorn>=23.0.0",
     "ida-domain==0.2.0",
