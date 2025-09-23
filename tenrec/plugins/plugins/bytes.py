@@ -330,7 +330,11 @@ class BytesPlugin(PluginBase):
             else:
                 data_type = DataType.QWORD
         else:
-            data_type = DataType(data_type)
+            try:
+                data_type = DataType(data_type)
+            except ValueError:
+                msg = f"Invalid data type value: {data_type}"
+                raise OperationError(msg)
 
         match data_type:
             case DataType.BYTE:
