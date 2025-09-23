@@ -36,24 +36,6 @@ class DataType(Enum):
     ALIGNMENT = "alignment"
 
 
-DataTypeLiteral = Literal[
-    "byte",
-    "word",
-    "dword",
-    "qword",
-    "oword",
-    "yword",
-    "zword",
-    "tbyte",
-    "float",
-    "double",
-    "packed_real",
-    "string",
-    "struct",
-    "alignment",
-]
-
-
 class BytesPlugin(PluginBase):
     """Plugin for managing raw bytes, data definitions, and low-level memory operations in the IDA database."""
 
@@ -88,7 +70,22 @@ class BytesPlugin(PluginBase):
     def create_data_at(
         self,
         address: HexEA,
-        data_type: DataTypeLiteral,
+        data_type: Literal[
+            "byte",
+            "word",
+            "dword",
+            "qword",
+            "oword",
+            "yword",
+            "zword",
+            "tbyte",
+            "float",
+            "double",
+            "packed_real",
+            "string",
+            "struct",
+            "alignment",
+        ],
         count: int = 1,
         force: bool = False,
         length: int | None = None,
@@ -99,36 +96,22 @@ class BytesPlugin(PluginBase):
         """Create data items of specified type at consecutive addresses.
 
         :param address: Starting address for data definitions.
-        :param data_type: Type of data to create (DataType enum). Options are:
-            `BYTE`: *byte (1 byte)*
-            `WORD`: *word (2 bytes)*
-            `DWORD`: *dword (4 bytes)*
-            `QWORD`: *qword (8 bytes)*
-            `OWORD`: *oword (16 bytes)*
-            `YWORD`: *yword (32 bytes)*
-            `ZWORD`: *zword (48 bytes)*
-            `TBYTE`: *tbyte (10 bytes)*
-            `FLOAT`: *float (4 bytes)*
-            `DOUBLE`: *double (8 bytes)*
-            `PACKED_REAL`: *packed_real (10 bytes)*
-            `STRING`: *string (variable length, requires length parameter)*
-            `STRUCT`: *struct (requires tid parameter for structure type)*
-            `ALIGNMENT`: *alignment (requires length or alignment parameter)*
+        :param data_type: Type of data to create (DataTypeLiteral).
         :param count: Number of consecutive elements to create.
         :param force: Override existing data definitions if True.
         :param length: Length parameter for strings and alignment types.
-        :param string_type: String encoding type (for DataType.STRING). Options are:
-            `C`: *0 (C-style null-terminated string, default)*
-            `C_16`: *1 (C-style 16-bit string)*
-            `C_32`: *2 (C-style 32-bit string)*
-            `PASCAL`: *4 (Pascal-style string)*
-            `PASCAL_16`: *5 (Pascal-style 16-bit string)*
-            `PASCAL_32`: *6 (Pascal-style 32-bit string)*
-            `LEN2`: *8 (String with 2-byte length prefix)*
-            `LEN2_16`: *9 (16-bit string with 2-byte length prefix)*
-            `LEN2_32`: *10 (32-bit string with 2-byte length prefix)*
-        :param tid: Structure type ID (for DataType.STRUCT).
-        :param alignment: Power of 2 alignment (for DataType.ALIGNMENT).
+        :param string_type: String encoding type (for "string"). Options are:
+            `0`: *C-style null-terminated string, default*
+            `1`: *C-style 16-bit string*
+            `2`: *C-style 32-bit string*
+            `4`: *Pascal-style string*
+            `5`: *Pascal-style 16-bit string*
+            `6`: *Pascal-style 32-bit string*
+            `8`: *String with 2-byte length prefix*
+            `9`: *16-bit string with 2-byte length prefix*
+            `10`: *32-bit string with 2-byte length prefix*
+        :param tid: Structure type ID (for "struct").
+        :param alignment: Power of 2 alignment (for "alignment").
         :return: True if data was successfully defined, False otherwise.
         """
         data_type = DataType(data_type)
@@ -165,32 +148,18 @@ class BytesPlugin(PluginBase):
             case DataType.ALIGNMENT:
                 length_val = length if length is not None else 0
                 return self.database.bytes.create_alignment_at(address.ea_t, length_val, alignment)
-            case _:
-                msg = f"Unsupported data type: {data_type}"
-                raise OperationError(msg)
 
     @operation()
     def get_value_at(
-        self, address: HexEA, data_type: DataTypeLiteral, allow_uninitialized: bool = False
+        self,
+        address: HexEA,
+        data_type: Literal["byte", "word", "dword", "qword", "float", "double", "string"],
+        allow_uninitialized: bool = False,
     ) -> int | float | str:
         """Read a value of specified type from memory.
 
         :param address: The effective address to read from.
-        :param data_type: Type of data to create (DataType enum). Options are:
-            `BYTE`: *byte (1 byte)*
-            `WORD`: *word (2 bytes)*
-            `DWORD`: *dword (4 bytes)*
-            `QWORD`: *qword (8 bytes)*
-            `OWORD`: *oword (16 bytes)*
-            `YWORD`: *yword (32 bytes)*
-            `ZWORD`: *zword (48 bytes)*
-            `TBYTE`: *tbyte (10 bytes)*
-            `FLOAT`: *float (4 bytes)*
-            `DOUBLE`: *double (8 bytes)*
-            `PACKED_REAL`: *packed_real (10 bytes)*
-            `STRING`: *string (variable length, requires length parameter)*
-            `STRUCT`: *struct (requires tid parameter for structure type)*
-            `ALIGNMENT`: *alignment (requires length or alignment parameter)*
+        :param data_type: Type of data to create.
         :param allow_uninitialized: Allow reading uninitialized memory if True.
         :return: Value read from memory (type depends on data_type).
         """
@@ -227,25 +196,30 @@ class BytesPlugin(PluginBase):
                 raise OperationError(msg)
 
     @operation()
-    def is_type_at(self, address: HexEA, data_type: DataTypeLiteral) -> bool:
+    def is_type_at(
+        self,
+        address: HexEA,
+        data_type: Literal[
+            "byte",
+            "word",
+            "dword",
+            "qword",
+            "oword",
+            "yword",
+            "zword",
+            "tbyte",
+            "float",
+            "double",
+            "packed_real",
+            "string",
+            "struct",
+            "alignment",
+        ],
+    ) -> bool:
         """Check if address contains a specific data type.
 
         :param address: The effective address to check.
-        :param data_type: Type of data to create (DataType enum). Options are:
-            `BYTE`: *byte (1 byte)*
-            `WORD`: *word (2 bytes)*
-            `DWORD`: *dword (4 bytes)*
-            `QWORD`: *qword (8 bytes)*
-            `OWORD`: *oword (16 bytes)*
-            `YWORD`: *yword (32 bytes)*
-            `ZWORD`: *zword (48 bytes)*
-            `TBYTE`: *tbyte (10 bytes)*
-            `FLOAT`: *float (4 bytes)*
-            `DOUBLE`: *double (8 bytes)*
-            `PACKED_REAL`: *packed_real (10 bytes)*
-            `STRING`: *string (variable length, requires length parameter)*
-            `STRUCT`: *struct (requires tid parameter for structure type)*
-            `ALIGNMENT`: *alignment (requires length or alignment parameter)*
+        :param data_type: Type of data to create (DataTypeLiteral).
         :return: True if address contains the specified type, False otherwise.
         """
         data_type = DataType(data_type)
@@ -280,7 +254,9 @@ class BytesPlugin(PluginBase):
                 return self.database.bytes.is_alignment_at(address.ea_t)
 
     @operation()
-    def patch_value_at(self, address: HexEA, value: int | bytes, data_type: DataTypeLiteral | None = None) -> bool:
+    def patch_value_at(
+        self, address: HexEA, value: int | bytes, data_type: Literal["byte", "word", "dword", "qword"] | None = None
+    ) -> bool:
         """Patch a value in the database (original value is preserved).
 
         :param address: Address to patch.
@@ -318,7 +294,9 @@ class BytesPlugin(PluginBase):
                 raise OperationError(msg)
 
     @operation()
-    def set_value_at(self, address: HexEA, value: int | bytes, data_type: DataTypeLiteral | None = None) -> bool:
+    def set_value_at(
+        self, address: HexEA, value: int | bytes, data_type: Literal["byte", "word", "dword", "qword"] | None = None
+    ) -> bool:
         """Set a value at the specified address.
 
         :param address: The effective address.
@@ -359,7 +337,7 @@ class BytesPlugin(PluginBase):
                 raise OperationError(msg)
 
     @operation()
-    def get_original_value_at(self, address: HexEA, data_type: DataTypeLiteral) -> int:
+    def get_original_value_at(self, address: HexEA, data_type: Literal["byte", "word", "dword", "qword"]) -> int:
         """Get original value (before patching) at address.
 
         :param address: The effective address.
