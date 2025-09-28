@@ -24,6 +24,7 @@ for easy extension.
   - [plugins](#plugins)
 - [Creating Custom Plugins](#creating-custom-plugins)
 - [Testing](#testing)
+- [Known Issues](#known-issues)
 - [Contributing](#contributing)
 - [Future Work](#future-work)
 
@@ -622,6 +623,10 @@ class TestCustomAnalysisPlugin:
         assert isinstance(results, list)
 ```
 
+
+## Known Issues
+- Tenrec is currently not supported on Windows. Work to enable this is ongoing. See [Issue #9](https://github.com/axelmierczuk/tenrec/issues/9) for details.
+
 ## Contributing
 
 We welcome contributions! Please follow these guidelines:
@@ -668,3 +673,4 @@ ruff check --fix .
   - Machine learning-based analysis
 - **Integration Improvements**: Better integration with other reverse engineering tools
 - **Documentation**: Expanded API documentation and tutorials
+
