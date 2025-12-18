@@ -1,4 +1,6 @@
 import contextlib
+import re
+from collections.abc import Callable, Iterator
 
 import ida_hexrays
 import ida_typeinf as ti
@@ -58,7 +60,6 @@ class TypesPlugin(PluginBase):
             raise OperationError(msg)
         return f"Declared type:\n{c_declaration[:20]}..."
 
-    # TODO:Refactor: Break this into smaller helper methods
     @operation(options=[PaginatedParameter()])
     def list_local_types(self) -> list[dict]:
         """Enumerate local types (TIL/IDATI) with rich, structured metadata.
@@ -80,7 +81,130 @@ class TypesPlugin(PluginBase):
             ```
         :return: A list of dictionaries with type information.
         """
+        return list(self.all_local_types())
 
+    @operation(options=[PaginatedParameter()])
+    def list_local_types_filtered(self, search: str) -> list[dict]:
+        """Enumerate local types (TIL/IDATI) with rich, structured metadata.
+
+        Returns items shaped like:
+            ```json
+            {
+                "ordinal": int,
+                "name": str,
+                "kind": str,  # "struct" | "union" | "enum" | "func" | "typedef" | "ptr" | "array" | "builtin" | "unknown"
+                "size": int | None,  # size in bytes if known
+                "decl_simple": str | None,  # 1-line C-ish declaration
+                "decl_full": str
+                | None,  # multi-line C declaration (with fields/args when available)
+                "details": {
+                    ...
+                },  # kind-specific details (members, enum values, func args/ret, etc.)
+            }
+            ```
+
+        :param search: Regular expression pattern to match against names.
+        :return: A list of dictionaries with type information.
+        """
+        return list(self.all_local_types(callback_filter=lambda x: re.search(search, x["name"]) is not None))
+
+    @operation()
+    def set_local_variable_type(self, function_address: HexEA, variable_name: str, new_type: str) -> str:
+        """Set the local variable's type in a function.
+
+        :param function_address: The function address
+        :param variable_name: The name of the local variable
+        :param new_type: The new type of the local variable
+        :return:
+        """
+        func = self.database.functions.get_at(function_address.ea_t)
+        if not func:
+            msg = f"No function found at address: {function_address}"
+            raise OperationError(msg)
+
+        if not new_type.endswith(";"):
+            new_type += ";"
+        new_tif = ida_typeinf.tinfo_t()
+        ida_typeinf.parse_decl(new_tif, None, new_type, ida_typeinf.PT_SIL)
+        result = ida_hexrays.rename_lvar(func.start_ea, variable_name, variable_name)
+        if not result:
+            msg = f"Failed to rename local variable: {variable_name}"
+            raise OperationError(msg)
+        modifier = CustomModifier(variable_name, new_tif)
+        result = ida_hexrays.modify_user_lvars(func.start_ea, modifier)
+        if not result:
+            msg = f"Failed to set type for local variable: {variable_name}"
+            raise OperationError(msg)
+        refresh_decompiler_ctext(func.start_ea)
+        return f"Local variable {variable_name} type set to {new_type}"
+
+    @operation()
+    def set_function_prototype(self, function_address: HexEA, prototype: str) -> str:
+        """Set a function prototype.
+
+        :param function_address: The address of the function
+        :param prototype: The prototype
+        :return:
+        """
+        if not ida_bytes.is_loaded(function_address.ea_t):
+            msg = f"Address {function_address} is not in a loaded segment"
+            raise OperationError(msg)
+        func = self.database.functions.get_at(function_address.ea_t)
+        tif = ida_typeinf.tinfo_t(prototype, None, ida_typeinf.PT_SIL)
+        if not tif.is_func():
+            msg = "Provided prototype is not a valid function type"
+            raise OperationError(msg)
+        if not ida_typeinf.apply_tinfo(func.start_ea, tif, ida_typeinf.PT_SIL):
+            msg = "Failed to apply function prototype"
+            raise OperationError(msg)
+        refresh_decompiler_ctext(func.start_ea)
+        return f"Set prototype for function {func.name} at {HexEA(func.start_ea)}"
+
+    @operation()
+    def set_global_variable_type(self, variable_address: HexEA, new_type: str) -> str:
+        """Set the global variable's type.
+
+        :param variable_address: The address of the global variable
+        :param new_type: The new type of the global variable
+        :return:
+        """
+        if not ida_bytes.is_loaded(variable_address.ea_t):
+            msg = f"Address {variable_address} is not in a loaded segment"
+            raise OperationError(msg)
+
+        new_type = new_type.strip()
+        if not new_type.endswith(";"):
+            new_type += ";"
+
+        tif = ida_typeinf.tinfo_t()
+        parse_flags = ida_typeinf.PT_SIL | ida_typeinf.PT_NDC
+        result = ida_typeinf.parse_decl(tif, None, new_type, parse_flags)
+
+        if result is None:
+            msg = f"Failed to parse type declaration: '{new_type}'"
+            raise OperationError(msg)
+
+        if tif.empty():
+            msg = f"Parsed type is empty or invalid: '{new_type}'"
+            raise OperationError(msg)
+
+        var_name = ida_name.get_name(variable_address) or f"var_{variable_address:X}"
+        apply_flags = ida_typeinf.TINFO_DEFINITE | ida_typeinf.TINFO_DELAYFUNC
+
+        if not ida_typeinf.apply_tinfo(variable_address, tif, apply_flags):
+            msg = (
+                f"Failed to apply type '{new_type}' to global variable '{var_name}' at {variable_address}. "
+                f"This might be due to size conflicts or invalid type for this location."
+            )
+            raise OperationError(msg)
+        return f"Successfully set type for global variable '{var_name}' at {variable_address} to '{new_type}'"
+
+    def all_local_types(self, callback_filter: Callable[[dict], bool] | None = None) -> Iterator[dict]:
+        """Helper method to retrieve all local types without pagination.
+
+        :param callback_filter: Optional filter function to apply to each local type.
+        :return: Iterator of local types.
+        """
         # Print helpers (avoid crashing if IDA can't format something)
         def _print_decl(tif: ti.tinfo_t, flags: int) -> str | None:
             try:
@@ -102,8 +226,6 @@ class TypesPlugin(PluginBase):
 
         idati = ti.get_idati()
         limit = ti.get_ordinal_limit(idati)
-
-        results: list[dict] = []
 
         for ordinal in range(1, limit):
             try:
@@ -267,114 +389,22 @@ class TypesPlugin(PluginBase):
                     except Exception:
                         pass
 
-                results.append(
-                    {
-                        "ordinal": ordinal,
-                        "name": name,
-                        "kind": kind,
-                        "size": size,
-                        "decl_simple": decl_simple,
-                        "decl_full": decl_full,
-                        "details": details,
-                    }
-                )
+                lt = {
+                    "ordinal": ordinal,
+                    "name": name,
+                    "kind": kind,
+                    "size": size,
+                    "decl_simple": decl_simple,
+                    "decl_full": decl_full,
+                    "details": details,
+                }
+                if callback_filter and callback_filter(lt):
+                    yield lt
+                if not callback_filter:
+                    yield lt
 
             except Exception:
                 # intentionally skip broken/partial entries and keep going
                 continue
-
-        return results
-
-    @operation()
-    def set_local_variable_type(self, function_address: HexEA, variable_name: str, new_type: str) -> str:
-        """Set the local variable's type in a function.
-
-        :param function_address: The function address
-        :param variable_name: The name of the local variable
-        :param new_type: The new type of the local variable
-        :return:
-        """
-        func = self.database.functions.get_at(function_address.ea_t)
-        if not func:
-            msg = f"No function found at address: {function_address}"
-            raise OperationError(msg)
-
-        if not new_type.endswith(";"):
-            new_type += ";"
-        new_tif = ida_typeinf.tinfo_t()
-        ida_typeinf.parse_decl(new_tif, None, new_type, ida_typeinf.PT_SIL)
-        result = ida_hexrays.rename_lvar(func.start_ea, variable_name, variable_name)
-        if not result:
-            msg = f"Failed to rename local variable: {variable_name}"
-            raise OperationError(msg)
-        modifier = CustomModifier(variable_name, new_tif)
-        result = ida_hexrays.modify_user_lvars(func.start_ea, modifier)
-        if not result:
-            msg = f"Failed to set type for local variable: {variable_name}"
-            raise OperationError(msg)
-        refresh_decompiler_ctext(func.start_ea)
-        return f"Local variable {variable_name} type set to {new_type}"
-
-    @operation()
-    def set_function_prototype(self, function_address: HexEA, prototype: str) -> str:
-        """Set a function prototype.
-
-        :param function_address: The address of the function
-        :param prototype: The prototype
-        :return:
-        """
-        if not ida_bytes.is_loaded(function_address):
-            msg = f"Address {function_address} is not in a loaded segment"
-            raise OperationError(msg)
-        func = self.database.functions.get_at(function_address.ea_t)
-        tif = ida_typeinf.tinfo_t(prototype, None, ida_typeinf.PT_SIL)
-        if not tif.is_func():
-            msg = "Provided prototype is not a valid function type"
-            raise OperationError(msg)
-        if not ida_typeinf.apply_tinfo(func.start_ea, tif, ida_typeinf.PT_SIL):
-            msg = "Failed to apply function prototype"
-            raise OperationError(msg)
-        refresh_decompiler_ctext(func.start_ea)
-        return f"Set prototype for function {func.name} at {HexEA(func.start_ea)}"
-
-    @operation()
-    def set_global_variable_type(self, variable_address: HexEA, new_type: str) -> str:
-        """Set the global variable's type.
-
-        :param variable_address: The address of the global variable
-        :param new_type: The new type of the global variable
-        :return:
-        """
-        if not ida_bytes.is_loaded(variable_address.ea_t):
-            msg = f"Address {variable_address} is not in a loaded segment"
-            raise OperationError(msg)
-
-        new_type = new_type.strip()
-        if not new_type.endswith(";"):
-            new_type += ";"
-
-        tif = ida_typeinf.tinfo_t()
-        parse_flags = ida_typeinf.PT_SIL | ida_typeinf.PT_NDC
-        result = ida_typeinf.parse_decl(tif, None, new_type, parse_flags)
-
-        if result is None:
-            msg = f"Failed to parse type declaration: '{new_type}'"
-            raise OperationError(msg)
-
-        if tif.empty():
-            msg = f"Parsed type is empty or invalid: '{new_type}'"
-            raise OperationError(msg)
-
-        var_name = ida_name.get_name(variable_address) or f"var_{variable_address:X}"
-        apply_flags = ida_typeinf.TINFO_DEFINITE | ida_typeinf.TINFO_DELAYFUNC
-
-        if not ida_typeinf.apply_tinfo(variable_address, tif, apply_flags):
-            msg = (
-                f"Failed to apply type '{new_type}' to global variable '{var_name}' at {variable_address}. "
-                f"This might be due to size conflicts or invalid type for this location."
-            )
-            raise OperationError(msg)
-        return f"Successfully set type for global variable '{var_name}' at {variable_address} to '{new_type}'"
-
 
 plugin = TypesPlugin()
