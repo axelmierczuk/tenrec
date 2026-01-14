@@ -323,7 +323,7 @@ class TypesPlugin(PluginBase):
         :param prototype: The prototype
         :return:
         """
-        if not ida_bytes.is_loaded(function_address):
+        if not ida_bytes.is_loaded(function_address.ea_t):
             msg = f"Address {function_address} is not in a loaded segment"
             raise OperationError(msg)
         func = self.database.functions.get_at(function_address.ea_t)
