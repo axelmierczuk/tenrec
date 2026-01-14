@@ -398,9 +398,7 @@ class TypesPlugin(PluginBase):
                     "decl_full": decl_full,
                     "details": details,
                 }
-                if callback_filter and callback_filter(lt):
-                    yield lt
-                if not callback_filter:
+                if callback_filter is None or callback_filter(lt):
                     yield lt
 
             except Exception:
