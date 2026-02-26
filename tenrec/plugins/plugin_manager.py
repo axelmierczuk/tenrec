@@ -8,6 +8,7 @@ from ida_domain import Database
 from loguru import logger
 from mcp.server import FastMCP
 
+from tenrec.main_thread import MainThreadExecutor
 from tenrec.plugins.models import PluginBase
 from tenrec.plugins.models.operation import OperationProperties
 
@@ -90,8 +91,14 @@ class PluginManager:
             bound = inspect.signature(function).bind(*args, **kwargs)
             bound.apply_defaults()
 
+            def _call():
+                return function(*bound.args, **bound.kwargs)
+
             try:
-                result = function(*bound.args, **bound.kwargs)
+                # Route IDA API calls to the main thread. FastMCP dispatches
+                # sync handlers to a worker thread pool, but IDA requires all
+                # API calls to originate from the main thread.
+                result = MainThreadExecutor.instance().execute(_call)
                 return properties.hook_post_call(context, result)
             except Exception as e:
                 return {"exception": type(e).__name__, "value": str(e)}

@@ -1,3 +1,4 @@
+import threading
 from typing import Any
 
 from fastmcp import FastMCP
@@ -5,6 +6,7 @@ from fastmcp.server.server import Transport
 from ida_domain.database import IdaCommandOptions
 from loguru import logger
 
+from tenrec.main_thread import MainThreadExecutor
 from tenrec.plugins.models import Instructions, PluginBase, operation
 from tenrec.plugins.plugin_manager import PluginManager
 from tenrec.sessions import Session
@@ -79,7 +81,30 @@ class Server(PluginBase):
     def run(self, **transport_kwargs: Any) -> None:
         self.plugin_manager.register_plugins(self.mcp)
         logger.info("Registered {} tools", self.plugin_manager.tools_registered)
-        self.mcp.run(transport=self._transport, **transport_kwargs)
+
+        executor = MainThreadExecutor.instance()
+
+        def _run_server():
+            try:
+                self.mcp.run(transport=self._transport, **transport_kwargs)
+            finally:
+                # When the MCP transport closes (client disconnect, EOF, etc.)
+                # stop the main-thread executor so the process can exit.
+                executor.stop()
+
+        # Run FastMCP server in a background daemon thread so the main thread
+        # stays free to service IDA API calls (which require the main thread).
+        server_thread = threading.Thread(target=_run_server, daemon=True)
+        server_thread.start()
+
+        # Block the main thread, processing IDA work items until the server
+        # thread exits (client disconnect / transport close).
+        try:
+            executor.run_forever()
+        except KeyboardInterrupt:
+            executor.stop()
+        finally:
+            server_thread.join(timeout=5)
 
     @operation()
     def new_session(
