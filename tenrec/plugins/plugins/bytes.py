@@ -504,17 +504,29 @@ class BytesPlugin(PluginBase):
         """
         return self.database.bytes.get_data_size_at(ea.ea_t)
 
-    @operation()
-    def get_disassembly_at(self, ea: HexEA, remove_tags: bool = True) -> str:
-        """Get disassembled instruction or data representation at address.
+    @operation(options=[PaginatedParameter()])
+    def get_disassembly_at(self, ea: HexEA, count: int = 1, remove_tags: bool = True) -> list[str]:
+        """Get disassembled instructions starting at the specified address.
 
-        :param ea: The effective address to disassemble.
+        :param ea: The effective address to start disassembling.
+        :param count: Number of instructions to disassemble (default: 1).
         :param remove_tags: Strip IDA color/formatting tags if True.
-        :return: Disassembly line as string (e.g., "mov eax, ebx" or "db 90h").
+        :return: List of disassembly lines, each formatted as "address: instruction".
         :raises OperationException: If disassembly fails.
         """
-        result = self.database.bytes.get_disassembly_at(ea.ea_t, remove_tags)
-        if result is None:
+        result = []
+        current_ea = ea.ea_t
+        for _ in range(count):
+            disasm = self.database.bytes.get_disassembly_at(current_ea, remove_tags)
+            if disasm is None:
+                break
+            result.append(f"{HexEA(current_ea)}: {disasm}")
+            # Move to the next instruction
+            next_ea = self.database.bytes.get_next_head(current_ea, None)
+            if next_ea is None or next_ea <= current_ea:
+                break
+            current_ea = next_ea
+        if not result:
             msg = f"Could not get disassembly at '{ea}' in database"
             raise OperationError(msg)
         return result

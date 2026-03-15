@@ -14,6 +14,7 @@ Analyze and manage functions in the binary including their boundaries, attribute
 - Get details on a function at 0x401000: `functions_get_at(0x401000)`
 - Find by name: `functions_get_by_name("main")`
 - Get pseudocode the pseudocode at function 0x401000: `functions_get_pseudocode(0x401000)`
+- Get disassembly of a function at 0x401000: `functions_get_disassembly(0x401000)`
 
 ## Anti-Examples
 - DON'T create overlapping functions without checking boundaries
@@ -153,6 +154,28 @@ Retrieves all functions that call the function at the specified address (incomin
 
 **Returns:**
 - **<span class='return-type'>list[tenrec.plugins.models.ida.FunctionData]</span>**: List of functions that call this function as FunctionData objects.
+
+
+### functions_get_disassembly
+
+```function
+def functions_get_disassembly(
+    function_address: HexEA,
+    remove_tags: bool = True,
+    offset: int = 0,
+    limit: int = 100
+) -> list[str]:
+```
+Retrieves the disassembly of the function at the specified address.
+
+**Args:**
+- **<span class='parameter'>function_address</span>** (**<span class='return-type'>HexEA</span>**): The effective address of the function to disassemble.
+- **<span class='parameter'>remove_tags</span>** (**<span class='return-type'>bool</span>**): Whether to remove IDA color/formatting tags for clean text output (default: True).
+- **<span class='parameter'>offset</span>** (**<span class='return-type'>int</span>**)
+- **<span class='parameter'>limit</span>** (**<span class='return-type'>int</span>**)
+
+**Returns:**
+- **<span class='return-type'>list[str]</span>**: List of disassembly lines, each formatted as "address: instruction".
 
 
 ### functions_get_pseudocode

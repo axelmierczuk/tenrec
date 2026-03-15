@@ -37,6 +37,7 @@ class FunctionsPlugin(PluginBase):
             "Get details on a function at 0x401000: `functions_get_at(0x401000)`",
             'Find by name: `functions_get_by_name("main")`',
             "Get pseudocode the pseudocode at function 0x401000: `functions_get_pseudocode(0x401000)`",
+            "Get disassembly of a function at 0x401000: `functions_get_disassembly(0x401000)`",
         ],
         anti_examples=[
             "DON'T create overlapping functions without checking boundaries",
@@ -157,6 +158,29 @@ class FunctionsPlugin(PluginBase):
             msg = f"No function found at address: {function_address}"
             raise OperationError(msg)
         return "\n".join(self.database.functions.get_pseudocode(resolved, remove_tags))
+
+    @operation(options=[PaginatedParameter()])
+    def get_disassembly(self, function_address: HexEA, remove_tags: bool = True) -> list[str]:
+        """Retrieves the disassembly of the function at the specified address.
+
+        :param function_address: The effective address of the function to disassemble.
+        :param remove_tags: Whether to remove IDA color/formatting tags for clean text output (default: True).
+        :return: List of disassembly lines, each formatted as "address: instruction".
+        :raises OperationException: If no function exists at the given address.
+        """
+        from idautils import FuncItems
+
+        resolved = self.database.functions.get_at(function_address.ea_t)
+        if not resolved:
+            msg = f"No function found at address: {function_address}"
+            raise OperationError(msg)
+
+        result = []
+        for insn_ea in FuncItems(resolved.start_ea):
+            disasm = self.database.bytes.get_disassembly_at(insn_ea, remove_tags)
+            if disasm:
+                result.append(f"{HexEA(insn_ea)}: {disasm}")
+        return result
 
     @operation()
     def get_signature(self, function_address: HexEA) -> str:

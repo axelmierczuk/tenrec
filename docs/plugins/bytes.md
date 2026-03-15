@@ -207,17 +207,23 @@ Get the size of a defined data item at address.
 ```function
 def bytes_get_disassembly_at(
     ea: HexEA,
-    remove_tags: bool = True
-) -> str:
+    count: int = 1,
+    remove_tags: bool = True,
+    offset: int = 0,
+    limit: int = 100
+) -> list[str]:
 ```
-Get disassembled instruction or data representation at address.
+Get disassembled instructions starting at the specified address.
 
 **Args:**
-- **<span class='parameter'>ea</span>** (**<span class='return-type'>HexEA</span>**): The effective address to disassemble.
+- **<span class='parameter'>ea</span>** (**<span class='return-type'>HexEA</span>**): The effective address to start disassembling.
+- **<span class='parameter'>count</span>** (**<span class='return-type'>int</span>**): Number of instructions to disassemble (default: 1).
 - **<span class='parameter'>remove_tags</span>** (**<span class='return-type'>bool</span>**): Strip IDA color/formatting tags if True.
+- **<span class='parameter'>offset</span>** (**<span class='return-type'>int</span>**)
+- **<span class='parameter'>limit</span>** (**<span class='return-type'>int</span>**)
 
 **Returns:**
-- **<span class='return-type'>str</span>**: Disassembly line as string (e.g., "mov eax, ebx" or "db 90h").
+- **<span class='return-type'>list[str]</span>**: List of disassembly lines, each formatted as "address: instruction".
 
 
 ### bytes_get_flags_at
