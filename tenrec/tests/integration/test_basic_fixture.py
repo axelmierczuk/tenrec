@@ -16,13 +16,15 @@ import pytest
 
 from tenrec.plugins.models.ida import HexEA
 from tenrec.plugins.plugins.comments import CommentsPlugin
+from tenrec.plugins.plugins.entries import EntriesPlugin
 from tenrec.plugins.plugins.functions import FunctionsPlugin
 from tenrec.plugins.plugins.imports import ImportsPlugin
 from tenrec.plugins.plugins.names import NamesPlugin
+from tenrec.plugins.plugins.segments import SegmentsPlugin
 from tenrec.plugins.plugins.strings import StringsPlugin
 from tenrec.plugins.plugins.xrefs import XrefsPlugin
 
-from ._helpers import attach, find_function, restore_comment
+from ._helpers import attach, find_function, find_name_address, restore_comment, restore_name
 
 
 # Every test here needs the IDA-backed fixture; mark once at module level so
@@ -214,3 +216,116 @@ class TestCommentsAgainstBasic:
             comments.set(HexEA(target.start_ea), marker)
             got = comments.get(HexEA(target.start_ea))
             assert got.comment == marker
+
+    def test_extra_anterior_comment_round_trip(self, basic_db):
+        from ida_domain.comments import ExtraCommentKind
+
+        comments = attach(CommentsPlugin, basic_db)
+        target = find_function(basic_db, "compute_sum", "_compute_sum")
+        marker = "tenrec_anterior_marker"
+        addr = HexEA(target.start_ea)
+
+        comments.set_extra(addr, 0, marker, ExtraCommentKind.ANTERIOR)
+        try:
+            assert comments.get_extra(addr, 0, ExtraCommentKind.ANTERIOR) == marker
+            assert marker in comments.get_all_extra(addr, ExtraCommentKind.ANTERIOR)
+        finally:
+            comments.delete_extra(addr, 0, ExtraCommentKind.ANTERIOR)
+
+
+# ---------------------------------------------------------------------------
+# Entries plugin — program entry point and exported symbols
+# ---------------------------------------------------------------------------
+
+
+class TestEntriesAgainstBasic:
+    def test_get_all_includes_main(self, basic_db):
+        entries = attach(EntriesPlugin, basic_db)
+        names = {e.name for e in entries.get_all()}
+        assert {"main", "_main"} & names
+
+    def test_get_by_name_resolves_main(self, basic_db):
+        entries = attach(EntriesPlugin, basic_db)
+        # IDA registers _main on Mach-O; try both spellings.
+        try:
+            entry = entries.get_by_name("_main")
+        except Exception:
+            entry = entries.get_by_name("main")
+        assert entry.name in {"main", "_main"}
+
+    def test_get_count_matches_get_all(self, basic_db):
+        entries = attach(EntriesPlugin, basic_db)
+        assert entries.get_count() == len(entries.get_all())
+
+
+# ---------------------------------------------------------------------------
+# Segments plugin — memory layout
+# ---------------------------------------------------------------------------
+
+
+class TestSegmentsAgainstBasic:
+    def test_get_all_includes_code_segment(self, basic_db):
+        segments = attach(SegmentsPlugin, basic_db)
+        names = {s.name for s in segments.get_all()}
+        # Mach-O code segment is __text; assertion is loose in case the
+        # platform differs (ELF: .text, PE: .text).
+        assert any(name in {"__text", ".text"} for name in names), f"got: {names}"
+
+    def test_get_at_function_returns_code_segment(self, basic_db):
+        segments = attach(SegmentsPlugin, basic_db)
+        main = find_function(basic_db, "main", "_main")
+
+        seg = segments.get_at(HexEA(main.start_ea))
+
+        assert seg.name in {"__text", ".text"}
+
+    def test_get_at_global_returns_data_segment(self, basic_db):
+        segments = attach(SegmentsPlugin, basic_db)
+        addr = find_name_address(basic_db, "_g_counter", "g_counter")
+
+        seg = segments.get_at(addr)
+
+        # Both __data and __common are valid for initialised globals on Mach-O.
+        assert seg.name in {"__data", "__common", ".data", ".bss"}, f"got: {seg.name}"
+
+
+# ---------------------------------------------------------------------------
+# Names plugin — round-trip set / get / delete
+# ---------------------------------------------------------------------------
+
+
+class TestNamesRoundTripAgainstBasic:
+    def test_rename_global_round_trips(self, basic_db):
+        names = attach(NamesPlugin, basic_db)
+        addr = find_name_address(basic_db, "_g_counter", "g_counter")
+        new_name = "tenrec_renamed_counter"
+
+        with restore_name(basic_db, addr.ea_t):
+            assert names.set_name(addr, new_name) is True
+            got = names.get_at(addr)
+            assert got.name == new_name
+
+
+# ---------------------------------------------------------------------------
+# Xrefs plugin — data-flow against g_counter (compute_sum writes to it)
+# ---------------------------------------------------------------------------
+
+
+class TestDataFlowXrefsAgainstBasic:
+    def test_get_writes_to_g_counter_includes_compute_sum(self, basic_db):
+        xrefs = attach(XrefsPlugin, basic_db)
+        compute_sum = find_function(basic_db, "compute_sum", "_compute_sum")
+        counter_addr = find_name_address(basic_db, "_g_counter", "g_counter")
+
+        writes = xrefs.get_writes_to(counter_addr)
+
+        # At least one writer should be inside compute_sum's body.
+        assert writes
+        in_compute_sum = [
+            w for w in writes
+            if compute_sum.start_ea <= w.ea_t < compute_sum.end_ea
+        ]
+        assert in_compute_sum, (
+            f"expected a writer of g_counter inside compute_sum [{hex(compute_sum.start_ea)}, "
+            f"{hex(compute_sum.end_ea)}); got writes at {[str(w) for w in writes]}"
+        )
