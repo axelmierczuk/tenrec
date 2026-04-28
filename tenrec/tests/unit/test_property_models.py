@@ -150,3 +150,17 @@ class TestHexEAContainerInvariants:
         for v in values:
             assert HexEA(v) in seeded
             assert HexEA(f"0x{v:x}") in seeded
+
+    @given(value=hex_ea_value)
+    def test_self_construction_is_idempotent(self, value):
+        """HexEA(HexEA(x)) must equal HexEA(x) — wrapping should be safe."""
+        once = HexEA(value)
+        twice = HexEA(once)
+        assert once == twice
+        assert once.ea_t == twice.ea_t
+
+    @given(s=st.text(alphabet="0123456789abcdef", min_size=1, max_size=10))
+    def test_whitespace_stripping(self, s):
+        """Surrounding whitespace must be tolerated and produce the same address."""
+        assert HexEA(s).ea_t == HexEA(f"  {s}  ").ea_t
+        assert HexEA(s).ea_t == HexEA(f"\t0x{s}\n").ea_t

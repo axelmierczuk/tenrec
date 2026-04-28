@@ -70,3 +70,60 @@ class TestCommentsRoundTripProperty:
             assert comments.set(addr, text) is True
             got = comments.get(addr)
             assert got.comment == text
+
+    @_INTEGRATION_SETTINGS
+    @given(text=comment_text)
+    def test_set_then_get_repeatable_comment(self, basic_db, text):
+        from ida_domain.comments import CommentKind
+
+        comments = attach(CommentsPlugin, basic_db)
+        target = find_function(basic_db, "compute_sum", "_compute_sum")
+        addr = HexEA(target.start_ea)
+
+        # Snapshot the repeatable comment specifically; restore_comment only
+        # tracks REGULAR. Inline the snapshot/restore to keep the helper
+        # focused.
+        original = basic_db.comments.get_at(target.start_ea, CommentKind.REPEATABLE)
+        try:
+            assert comments.set(addr, text, CommentKind.REPEATABLE) is True
+            got = comments.get(addr, CommentKind.REPEATABLE)
+            assert got.comment == text
+        finally:
+            if original is not None:
+                basic_db.comments.set_at(target.start_ea, original.comment, CommentKind.REPEATABLE)
+            else:
+                basic_db.comments.delete_at(target.start_ea, CommentKind.REPEATABLE)
+
+    @_INTEGRATION_SETTINGS
+    @given(text=comment_text)
+    def test_extra_anterior_comment_round_trip(self, basic_db, text):
+        from ida_domain.comments import ExtraCommentKind
+
+        comments = attach(CommentsPlugin, basic_db)
+        target = find_function(basic_db, "compute_sum", "_compute_sum")
+        addr = HexEA(target.start_ea)
+
+        comments.set_extra(addr, 0, text, ExtraCommentKind.ANTERIOR)
+        try:
+            assert comments.get_extra(addr, 0, ExtraCommentKind.ANTERIOR) == text
+        finally:
+            comments.delete_extra(addr, 0, ExtraCommentKind.ANTERIOR)
+
+
+class TestForceNameProperty:
+    @_INTEGRATION_SETTINGS
+    @given(name=valid_c_identifier(min_size=2, max_size=32))
+    def test_force_name_succeeds_for_valid_identifiers(self, basic_db, name):
+        """``force_name`` should accept any valid identifier and surface a
+        name that, ignoring auto-suffixing for collisions, starts with the
+        requested name."""
+        names = attach(NamesPlugin, basic_db)
+        addr = find_name_address(basic_db, "_g_buffer", "g_buffer")
+
+        with restore_name(basic_db, addr.ea_t):
+            assert names.force_name(addr, name) is True
+            got = names.get_at(addr)
+            # IDA may auto-suffix on collision (foo, foo_0, foo_1, ...).
+            # The contract we check: the resulting name starts with the
+            # requested base.
+            assert got.name.startswith(name)

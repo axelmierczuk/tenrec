@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from tenrec.plugins.plugins.bytes import BytesPlugin
 
@@ -58,3 +59,57 @@ class TestSetValueRoundTripProperty:
 
         assert bytes_plugin.set_value_at(addr, value, "byte") is True
         assert bytes_plugin.get_value_at(addr, "byte") == value
+
+
+class TestScalarSetGetRoundTripProperty:
+    """Parametrise set_value_at / get_value_at across every supported width.
+
+    Pairs each data type with a value-range strategy so Hypothesis can
+    generate values that fit. The same plugin code path is exercised for
+    each width — without parametrisation, only ``byte`` would be covered.
+    """
+
+    @_INTEGRATION_SETTINGS
+    @given(value=st.integers(min_value=0, max_value=0xFFFF))
+    def test_word_round_trip(self, data_layout_db, value):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_words", "g_words")
+        bytes_plugin.create_data_at(addr, "word", count=1, force=True)
+        assert bytes_plugin.set_value_at(addr, value, "word") is True
+        assert bytes_plugin.get_value_at(addr, "word") == value
+
+    @_INTEGRATION_SETTINGS
+    @given(value=st.integers(min_value=0, max_value=0xFFFFFFFF))
+    def test_dword_round_trip(self, data_layout_db, value):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_dwords", "g_dwords")
+        bytes_plugin.create_data_at(addr, "dword", count=1, force=True)
+        assert bytes_plugin.set_value_at(addr, value, "dword") is True
+        assert bytes_plugin.get_value_at(addr, "dword") == value
+
+    @_INTEGRATION_SETTINGS
+    @given(value=st.integers(min_value=0, max_value=0xFFFFFFFFFFFFFFFF))
+    def test_qword_round_trip(self, data_layout_db, value):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_qword", "g_qword")
+        bytes_plugin.create_data_at(addr, "qword", count=1, force=True)
+        assert bytes_plugin.set_value_at(addr, value, "qword") is True
+        assert bytes_plugin.get_value_at(addr, "qword") == value
+
+
+class TestPatchIdempotenceProperty:
+    @_INTEGRATION_SETTINGS
+    @given(value=byte_value)
+    def test_patching_twice_is_same_as_once(self, data_layout_db, value):
+        """Applying the same patch repeatedly must converge — the second
+        patch is a no-op observable through ``get_value_at``."""
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_bytes", "g_bytes")
+        try:
+            bytes_plugin.patch_value_at(addr, value)
+            after_one = bytes_plugin.get_value_at(addr, "byte")
+            bytes_plugin.patch_value_at(addr, value)
+            after_two = bytes_plugin.get_value_at(addr, "byte")
+            assert after_one == after_two == value
+        finally:
+            bytes_plugin.revert_byte_at(addr)

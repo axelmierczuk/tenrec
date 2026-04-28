@@ -271,10 +271,12 @@ uv run mutmut show <id>             # diff a single mutant against the source
 **Known issue on Python 3.13**: `mutmut results` and `mutmut html` raise
 `'QueryResultIterator' object is not iterable` because mutmut 2.x
 predates a pony-orm change. The runs themselves work and write a
-`.mutmut-cache` SQLite file; query it directly to see counts:
+`.mutmut-cache` SQLite file; use the bundled summary script to read it:
 
 ```bash
-sqlite3 .mutmut-cache "SELECT status, COUNT(*) FROM Mutant GROUP BY status"
+uv run python scripts/mutmut_summary.py                # counts grouped by file
+uv run python scripts/mutmut_summary.py --show-diffs   # also print each surviving mutant's diff
+uv run python scripts/mutmut_summary.py --file bytes   # filter to one source file
 ```
 
 **Interpreting survivors**: the LLM-facing `Instructions` metadata
