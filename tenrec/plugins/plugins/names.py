@@ -147,6 +147,18 @@ class NamesPlugin(PluginBase):
         return NameData.from_tuple((ea, name))
 
     @operation()
+    def is_valid_name(self, name: str) -> bool:
+        """Check whether a string is a valid user-defined name.
+
+        Useful for validating names before calling `set_name` or `force_name` to avoid
+        rejection by IDA's naming rules (e.g., reserved keywords, invalid characters).
+
+        :param name: Name to validate.
+        :return: True if the name is valid, False otherwise.
+        """
+        return self.database.names.is_valid_name(name)
+
+    @operation()
     def set_name(self, ea: HexEA, name: str, flags: int | SetNameFlags = SetNameFlags.NOCHECK) -> bool:
         """Set or delete a name/label at the specified address.
 

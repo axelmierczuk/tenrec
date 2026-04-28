@@ -1,6 +1,6 @@
 import re
 
-from ida_domain.comments import CommentKind
+from ida_domain.comments import CommentKind, ExtraCommentKind
 
 from tenrec.plugins.models import (
     CommentData,
@@ -111,6 +111,70 @@ class CommentsPlugin(PluginBase):
         :return: True if comment was successfully set, False otherwise.
         """
         return self.database.comments.set_at(address.ea_t, comment, comment_kind)
+
+    @operation()
+    def get_extra(
+        self, address: HexEA, index: int, kind: ExtraCommentKind = ExtraCommentKind.ANTERIOR
+    ) -> str:
+        """Get an extra (anterior or posterior) comment at the specified address.
+
+        Extra comments are multi-line comments that appear above (anterior) or below
+        (posterior) the disassembly at a given address.
+
+        :param address: Address where the extra comment is located.
+        :param index: Zero-based index of the extra comment line.
+        :param kind: ANTERIOR (above the line) or POSTERIOR (below the line).
+        :return: Extra comment text.
+        :raises OperationException: If no extra comment exists at the given index.
+        """
+        result = self.database.comments.get_extra_at(address.ea_t, index, kind)
+        if result is None:
+            msg = f"No extra {kind.name.lower()} comment at index {index} for address: {address}"
+            raise OperationError(msg)
+        return result
+
+    @operation(options=[PaginatedParameter()])
+    def get_all_extra(
+        self, address: HexEA, kind: ExtraCommentKind = ExtraCommentKind.ANTERIOR
+    ) -> list[str]:
+        """Get all extra (anterior or posterior) comments at the specified address.
+
+        :param address: Address where the extra comments are located.
+        :param kind: ANTERIOR (above the line) or POSTERIOR (below the line).
+        :return: List of extra comment lines in order.
+        """
+        return list(self.database.comments.get_all_extra_at(address.ea_t, kind))
+
+    @operation()
+    def set_extra(
+        self,
+        address: HexEA,
+        index: int,
+        comment: str,
+        kind: ExtraCommentKind = ExtraCommentKind.ANTERIOR,
+    ) -> bool:
+        """Set an extra (anterior or posterior) comment at the specified address.
+
+        :param address: Address where to place the extra comment.
+        :param index: Zero-based index of the extra comment line.
+        :param comment: Comment text.
+        :param kind: ANTERIOR (above the line) or POSTERIOR (below the line).
+        :return: True if successful, False otherwise.
+        """
+        return self.database.comments.set_extra_at(address.ea_t, index, comment, kind)
+
+    @operation()
+    def delete_extra(
+        self, address: HexEA, index: int, kind: ExtraCommentKind = ExtraCommentKind.ANTERIOR
+    ) -> bool:
+        """Delete an extra (anterior or posterior) comment at the specified address.
+
+        :param address: Address where the extra comment is located.
+        :param index: Zero-based index of the extra comment line.
+        :param kind: ANTERIOR (above the line) or POSTERIOR (below the line).
+        :return: True if successful, False otherwise.
+        """
+        return self.database.comments.delete_extra_at(address.ea_t, index, kind)
 
 
 plugin = CommentsPlugin()

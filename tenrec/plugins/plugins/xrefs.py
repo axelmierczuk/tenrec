@@ -3,6 +3,7 @@ from enum import Enum
 from ida_domain.xrefs import XrefsFlags
 
 from tenrec.plugins.models import (
+    CallerData,
     FunctionData,
     HexEA,
     Instructions,
@@ -46,8 +47,9 @@ class XrefsPlugin(PluginBase):
         examples=[
             'Get a call graph for function "main": `xrefs_get_reference_graph("main", depth=2, kind="code")`',
             "Find callers of a function at 0x401000: `xrefs_get_calls_to(0x401000)`",
-            "Find data usage: `xrefs_get_data_xrefs_to(0x404000)`",
-            "Add reference: `xrefs_add_code_xref(0x401000, 0x402000, 16)`",
+            "Find detailed caller info with enclosing function: `xrefs_get_callers(0x401000)`",
+            "Find addresses that read a global at 0x404000: `xrefs_get_reads_of(0x404000)`",
+            "Find addresses that write a global at 0x404000: `xrefs_get_writes_to(0x404000)`",
         ],
         anti_examples=[
             "DON'T confuse code and data references",
@@ -85,6 +87,76 @@ class XrefsPlugin(PluginBase):
         :return: List of XrefData objects for each incoming call.
         """
         return list(map(XrefData.from_ida, list(self.database.xrefs.to_ea(address.ea_t, flags))))
+
+    @operation(options=[PaginatedParameter()])
+    def get_calls_from(self, address: HexEA) -> list[HexEA]:
+        """Get addresses of all functions called from the given address.
+
+        Convenience filter that returns only call targets (not jumps or data refs).
+
+        :param address: Source address containing call instructions.
+        :return: List of called target addresses.
+        """
+        return [HexEA(ea) for ea in self.database.xrefs.calls_from_ea(address.ea_t)]
+
+    @operation(options=[PaginatedParameter()])
+    def get_calls_to(self, address: HexEA) -> list[HexEA]:
+        """Get addresses where calls to the given address occur.
+
+        Convenience filter that returns only call sites (not jumps or data refs).
+
+        :param address: Target address being called.
+        :return: List of source addresses containing call instructions.
+        """
+        return [HexEA(ea) for ea in self.database.xrefs.calls_to_ea(address.ea_t)]
+
+    @operation(options=[PaginatedParameter()])
+    def get_callers(self, function_address: HexEA) -> list[CallerData]:
+        """Get detailed information for every caller of a function.
+
+        Unlike `get_calls_to`, each result includes the caller's enclosing function and
+        the xref type (call_near, call_far, etc.).
+
+        :param function_address: Function start address.
+        :return: List of CallerData objects describing each caller site.
+        """
+        return [CallerData.from_ida(c) for c in self.database.xrefs.get_callers(function_address.ea_t)]
+
+    @operation(options=[PaginatedParameter()])
+    def get_jumps_from(self, address: HexEA) -> list[HexEA]:
+        """Get addresses jumped to from the given address.
+
+        :param address: Source address containing jump instructions.
+        :return: List of jump target addresses.
+        """
+        return [HexEA(ea) for ea in self.database.xrefs.jumps_from_ea(address.ea_t)]
+
+    @operation(options=[PaginatedParameter()])
+    def get_jumps_to(self, address: HexEA) -> list[HexEA]:
+        """Get addresses where jumps to the given address occur.
+
+        :param address: Target address.
+        :return: List of source addresses containing jump instructions.
+        """
+        return [HexEA(ea) for ea in self.database.xrefs.jumps_to_ea(address.ea_t)]
+
+    @operation(options=[PaginatedParameter()])
+    def get_reads_of(self, data_address: HexEA) -> list[HexEA]:
+        """Get addresses that read from the given data location.
+
+        :param data_address: Data address.
+        :return: List of source addresses that read the data.
+        """
+        return [HexEA(ea) for ea in self.database.xrefs.reads_of_ea(data_address.ea_t)]
+
+    @operation(options=[PaginatedParameter()])
+    def get_writes_to(self, data_address: HexEA) -> list[HexEA]:
+        """Get addresses that write to the given data location.
+
+        :param data_address: Data address.
+        :return: List of source addresses that write to the data.
+        """
+        return [HexEA(ea) for ea in self.database.xrefs.writes_to_ea(data_address.ea_t)]
 
     @operation()
     def get_xref_graph(

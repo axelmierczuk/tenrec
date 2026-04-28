@@ -2,6 +2,7 @@ from .bytes import plugin as bytes_plugin
 from .comments import plugin as comments_plugin
 from .entries import plugin as entries_plugin
 from .functions import plugin as functions_plugin
+from .imports import plugin as imports_plugin
 from .names import plugin as names_plugin
 from .segments import plugin as segments_plugin
 from .strings import plugin as strings_plugin
@@ -13,6 +14,7 @@ DEFAULT_PLUGINS = [
     comments_plugin,
     entries_plugin,
     functions_plugin,
+    imports_plugin,
     names_plugin,
     segments_plugin,
     strings_plugin,

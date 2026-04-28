@@ -86,9 +86,20 @@ def mock_ida_database() -> Mock:
     db.functions.get_between = Mock(return_value=[])
     db.functions.get_callees = Mock(return_value=[])
     db.functions.get_callers = Mock(return_value=[])
-    db.functions.get_pseudocode = Mock(return_value=["int main() {", "    return 0;", "}"])
     db.functions.get_signature = Mock(return_value="int main(int argc, char **argv)")
     db.functions.set_name = Mock(return_value=True)
+    db.functions.does_return = Mock(return_value=True)
+    db.functions.get_disassembly = Mock(return_value=["mov eax, 0", "ret"])
+    db.functions.get_flags = Mock(return_value=0)
+    db.functions.get_local_variables = Mock(return_value=[])
+    db.functions.get_local_variable_by_name = Mock(return_value=None)
+    db.functions.get_local_variable_references = Mock(return_value=[])
+    db.functions.get_data_items = Mock(return_value=[])
+
+    # Setup pseudocode mock
+    db.pseudocode = Mock()
+    db.pseudocode.get_text = Mock(return_value=["int main() {", "    return 0;", "}"])
+    db.pseudocode.decompile_many = Mock(return_value=[])
 
     # Setup other plugin mocks
     db.xrefs = Mock()
@@ -99,6 +110,15 @@ def mock_ida_database() -> Mock:
     db.types = Mock()
     db.bytes = Mock()
     db.entries = Mock()
+    db.imports = Mock()
+    db.imports.get_all_imports = Mock(return_value=[])
+    db.imports.get_all_modules = Mock(return_value=[])
+    db.imports.get_import_at = Mock(return_value=None)
+    db.imports.get_import_by_name = Mock(return_value=None)
+    db.imports.get_module_by_name = Mock(return_value=None)
+    db.imports.get_imports_for_module = Mock(return_value=[])
+    db.imports.get_module_count = Mock(return_value=0)
+    db.imports.get_import_count = Mock(return_value=0)
 
     # Setup database state
     db.is_open = Mock(return_value=True)

@@ -3,8 +3,10 @@ from enum import IntEnum
 import ida_hexrays
 from ida_domain.comments import CommentInfo
 from ida_domain.entries import EntryInfo
+from ida_domain.functions import LocalVariable, LocalVariableReference
+from ida_domain.imports import ImportInfo, ImportModuleInfo
 from ida_domain.strings import StringItem, ea_t
-from ida_domain.xrefs import XrefInfo
+from ida_domain.xrefs import CallerInfo, XrefInfo
 from ida_funcs import func_t
 from ida_segment import segment_t
 from idautils import ida_typeinf
@@ -337,3 +339,84 @@ class CommentData(BaseModel):
     @classmethod
     def from_ida(cls, comment: CommentInfo) -> "CommentData":
         return cls(ea=HexEA(comment.ea), comment=comment.comment, repeatable=comment.repeatable)
+
+
+class LocalVariableData(BaseModel):
+    index: int
+    name: str
+    type: str | None
+    size: int
+    is_argument: bool
+    is_result: bool
+
+    @classmethod
+    def from_ida(cls, lvar: LocalVariable) -> "LocalVariableData":
+        return cls(
+            index=lvar.index,
+            name=lvar.name,
+            type=lvar.type_str if lvar.type is not None else None,
+            size=lvar.size,
+            is_argument=lvar.is_argument,
+            is_result=lvar.is_result,
+        )
+
+
+class LocalVariableReferenceData(BaseModel):
+    access_type: str
+    context: str | None
+    ea: HexEA | None
+    line_number: int | None
+    code_line: str | None
+
+    @classmethod
+    def from_ida(cls, ref: LocalVariableReference) -> "LocalVariableReferenceData":
+        return cls(
+            access_type=ref.access_type.name,
+            context=ref.context.name if ref.context is not None else None,
+            ea=HexEA(ref.ea) if ref.ea is not None else None,
+            line_number=ref.line_number,
+            code_line=ref.code_line,
+        )
+
+
+class CallerData(BaseModel):
+    ea: HexEA
+    name: str
+    xref_type: str
+    function_ea: HexEA | None
+
+    @classmethod
+    def from_ida(cls, caller: CallerInfo) -> "CallerData":
+        return cls(
+            ea=HexEA(caller.ea),
+            name=caller.name,
+            xref_type=caller.xref_type.name,
+            function_ea=HexEA(caller.function_ea) if caller.function_ea is not None else None,
+        )
+
+
+class ImportData(BaseModel):
+    address: HexEA
+    name: str | None
+    ordinal: int
+    module_index: int
+    module_name: str
+
+    @classmethod
+    def from_ida(cls, info: ImportInfo) -> "ImportData":
+        return cls(
+            address=HexEA(info.address),
+            name=info.name,
+            ordinal=info.ordinal,
+            module_index=info.module_index,
+            module_name=info.module_name,
+        )
+
+
+class ImportModuleData(BaseModel):
+    index: int
+    name: str
+
+    @classmethod
+    def from_ida(cls, info: ImportModuleInfo) -> "ImportModuleData":
+        return cls(index=info.index, name=info.name)

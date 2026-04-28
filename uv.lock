@@ -543,15 +543,16 @@ wheels = [
 
 [[package]]
 name = "ida-domain"
-version = "0.2.0"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "idapro" },
+    { name = "packaging" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/47/97/61c04e860741d3f0a0f79d58eb7cf52bc7421710c0b499f9f94117e834dc/ida_domain-0.2.0.tar.gz", hash = "sha256:2d79a644cc434da2b6f65bcd0663625c23dab6b53c0dc7c0642411e19ab75b85", size = 83109, upload-time = "2025-09-05T14:00:17.422Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/80/4b99404b9e658e5289e00def5aa0617941565c73782a420bd572e3ffe5cc/ida_domain-0.5.0.tar.gz", hash = "sha256:bc992924f271aa1f75afe359ef1fde9b1bb9e31f445e6e1ddada143af488e394", size = 207012, upload-time = "2026-04-24T07:58:15.004Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/23/09/f9f504fec8c87ec183e550ba58e3a7257b1f48ae66950e79ad7f04e97813/ida_domain-0.2.0-py3-none-any.whl", hash = "sha256:c6beed7faec18ed54e4af798f35f615155add18e5e082be4e215ce126fd0e2fc", size = 89292, upload-time = "2025-09-05T14:00:15.905Z" },
+    { url = "https://files.pythonhosted.org/packages/89/17/3621a7412dca4ea8dd7149c3a64977fc2ad1434a64a21fc1ed8e55acc13e/ida_domain-0.5.0-py3-none-any.whl", hash = "sha256:3963c0d300734c1558f86cd482f4b35ef4af333700371f350e89299e1eb7b634", size = 151350, upload-time = "2026-04-24T07:58:13.294Z" },
 ]
 
 [[package]]
@@ -1521,7 +1522,7 @@ wheels = [
 
 [[package]]
 name = "tenrec"
-version = "0.1.8"
+version = "1.0.2"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
@@ -1553,7 +1554,7 @@ requires-dist = [
     { name = "gitpython", specifier = ">=3.1.45" },
     { name = "giturlparse", specifier = ">=0.12.0" },
     { name = "gunicorn", specifier = ">=23.0.0" },
-    { name = "ida-domain", specifier = "==0.2.0" },
+    { name = "ida-domain", specifier = "==0.5.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "rich-click", specifier = ">=1.8.9" },

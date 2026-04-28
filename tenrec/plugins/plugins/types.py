@@ -47,6 +47,66 @@ class TypesPlugin(PluginBase):
     )
 
     @operation()
+    def apply_at(self, address: HexEA, type_name: str) -> bool:
+        """Apply an existing named type from the type library to the address.
+
+        Use this when the type already exists (built-in or previously declared) and you just want
+        to bind it to a specific location. For applying a fresh C declaration in one step, use
+        `apply_declaration_at` instead.
+
+        :param address: The effective address to type.
+        :param type_name: Name of an existing type (e.g., "MyStruct", "DWORD").
+        :return: True if the type was applied successfully, False otherwise.
+        :raises OperationException: If the named type is not found.
+        """
+        tif = self.database.types.get_by_name(type_name)
+        if tif is None:
+            msg = f"Type '{type_name}' not found"
+            raise OperationError(msg)
+        return self.database.types.apply_at(tif, address.ea_t)
+
+    @operation()
+    def apply_declaration_at(self, address: HexEA, c_declaration: str) -> bool:
+        """Parse a C declaration and apply the resulting type to the address in one step.
+
+        Equivalent to IDC's `SetType()`. Useful for setting a function prototype or variable type
+        without first having to declare it as a named type.
+
+        :param address: The effective address to type.
+        :param c_declaration: A C declaration string (e.g., "int __fastcall handler(int arg)").
+        :return: True if the declaration was parsed and applied, False otherwise.
+        """
+        return self.database.types.apply_declaration_at(address.ea_t, c_declaration)
+
+    @operation()
+    def get_at(self, address: HexEA) -> str:
+        """Get the type information of the item at the given address as a C declaration string.
+
+        :param address: The effective address to inspect.
+        :return: One-line C declaration of the type at the address.
+        :raises OperationException: If no type is set at the address.
+        """
+        tif = self.database.types.get_at(address.ea_t)
+        if tif is None:
+            msg = f"No type information at address: {address}"
+            raise OperationError(msg)
+        return tif._print(None, ti.PRTYPE_1LINE | ti.PRTYPE_TYPE | ti.PRTYPE_SEMI) or tif.dstr()
+
+    @operation()
+    def get_by_name(self, name: str) -> str:
+        """Look up a named type and return its C declaration.
+
+        :param name: Name of the type (e.g., "MyStruct", "DWORD").
+        :return: One-line C declaration of the named type.
+        :raises OperationException: If no type with this name exists.
+        """
+        tif = self.database.types.get_by_name(name)
+        if tif is None:
+            msg = f"Type '{name}' not found"
+            raise OperationError(msg)
+        return tif._print(None, ti.PRTYPE_1LINE | ti.PRTYPE_TYPE | ti.PRTYPE_SEMI) or tif.dstr()
+
+    @operation()
     def declare_c_type(self, c_declaration: str) -> str:
         """Declares a C declaration type.
 

@@ -14,6 +14,11 @@ from .ida import (
     StringData,
     XrefData,
     CommentData,
+    LocalVariableData,
+    LocalVariableReferenceData,
+    CallerData,
+    ImportData,
+    ImportModuleData,
 )
 from .operation import operation, OperationProperties
 from .parameters import OperationParameterBase, PaginatedParameter, ParameterOptions

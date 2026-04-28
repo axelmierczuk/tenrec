@@ -13,7 +13,7 @@ requires-python = ">=3.10"
 dependencies = [
     "fastmcp>=2.12.3",
     "gunicorn>=23.0.0",
-    "ida-domain==0.2.0",
+    "ida-domain==0.5.0",
     "jinja2>=3.1.6",
     "loguru>=0.7.3",
     "rich-click>=1.8.9",
@@ -70,6 +70,7 @@ bytes = "tenrec.plugins.plugins.bytes:BytesPlugin"
 comments = "tenrec.plugins.plugins.comments:CommentsPlugin"
 entries = "tenrec.plugins.plugins.entries:EntriesPlugin"
 functions = "tenrec.plugins.plugins.functions:FunctionsPlugin"
+imports = "tenrec.plugins.plugins.imports:ImportsPlugin"
 names = "tenrec.plugins.plugins.names:NamesPlugin"
 segments = "tenrec.plugins.plugins.segments:SegmentsPlugin"
 strings = "tenrec.plugins.plugins.strings:StringsPlugin"

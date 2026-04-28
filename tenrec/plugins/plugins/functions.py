@@ -1,11 +1,14 @@
 import re
 
 import ida_hexrays
+from ida_domain.functions import FunctionFlags
 
 from tenrec.plugins.models import (
     FunctionData,
     HexEA,
     Instructions,
+    LocalVariableData,
+    LocalVariableReferenceData,
     OperationError,
     PaginatedParameter,
     PluginBase,
@@ -37,6 +40,11 @@ class FunctionsPlugin(PluginBase):
             "Get details on a function at 0x401000: `functions_get_at(0x401000)`",
             'Find by name: `functions_get_by_name("main")`',
             "Get pseudocode the pseudocode at function 0x401000: `functions_get_pseudocode(0x401000)`",
+            (
+                "Decompile multiple functions in one batch: "
+                "`functions_decompile_many([0x401000, 0x401200])`"
+            ),
+            "List local variables of a function: `functions_get_local_variables(0x401000)`",
         ],
         anti_examples=[
             "DON'T create overlapping functions without checking boundaries",
@@ -156,7 +164,137 @@ class FunctionsPlugin(PluginBase):
         if not resolved:
             msg = f"No function found at address: {function_address}"
             raise OperationError(msg)
-        return "\n".join(self.database.functions.get_pseudocode(resolved, remove_tags))
+        return "\n".join(self.database.pseudocode.get_text(resolved, remove_tags))
+
+    @operation()
+    def decompile_many(
+        self, function_addresses: list[HexEA], remove_tags: bool = True
+    ) -> dict[HexEA, str]:
+        """Decompile multiple functions in a single batch.
+
+        More efficient than calling get_pseudocode repeatedly when decompiling many functions.
+
+        :param function_addresses: List of effective addresses for functions to decompile.
+        :param remove_tags: Whether to remove IDA color/formatting tags for clean text output (default: True).
+        :return: Mapping of function address to its decompiled pseudocode (newline-joined).
+        :raises OperationException: If a function is not found or decompilation fails.
+        """
+        funcs = []
+        for addr in function_addresses:
+            resolved = self.database.functions.get_at(addr.ea_t)
+            if not resolved:
+                msg = f"No function found at address: {addr}"
+                raise OperationError(msg)
+            funcs.append(resolved)
+        results = self.database.pseudocode.decompile_many(funcs)
+        return {
+            HexEA(func.start_ea): "\n".join(decomp.to_text(remove_tags))
+            for func, decomp in zip(funcs, results, strict=True)
+        }
+
+    @operation(options=[PaginatedParameter()])
+    def get_data_items(self, function_address: HexEA) -> list[HexEA]:
+        """Get addresses of data items embedded inside the function body.
+
+        Returns addresses within the function boundaries that are defined as data rather than
+        code - typically jump tables, embedded constants, or read-only literals laid out next to
+        the function.
+
+        :param function_address: The effective address of the function.
+        :return: List of addresses of data items inside the function.
+        :raises OperationException: If no function exists at the given address.
+        """
+        resolved = self.database.functions.get_at(function_address.ea_t)
+        if not resolved:
+            msg = f"No function found at address: {function_address}"
+            raise OperationError(msg)
+        return [HexEA(ea) for ea in self.database.functions.get_data_items(resolved)]
+
+    @operation()
+    def get_disassembly(self, function_address: HexEA, remove_tags: bool = True) -> str:
+        """Retrieves the disassembly listing for the function at the specified address.
+
+        :param function_address: The effective address of the function.
+        :param remove_tags: Whether to remove IDA color/formatting tags (default: True).
+        :return: Disassembly as a newline-separated string.
+        :raises OperationException: If no function exists at the given address.
+        """
+        resolved = self.database.functions.get_at(function_address.ea_t)
+        if not resolved:
+            msg = f"No function found at address: {function_address}"
+            raise OperationError(msg)
+        return "\n".join(self.database.functions.get_disassembly(resolved, remove_tags))
+
+    @operation()
+    def does_return(self, function_address: HexEA) -> bool:
+        """Check whether the function returns to its caller (i.e., is not noreturn).
+
+        :param function_address: The effective address of the function.
+        :return: True if the function returns, False if it is noreturn.
+        :raises OperationException: If no function exists at the given address.
+        """
+        resolved = self.database.functions.get_at(function_address.ea_t)
+        if not resolved:
+            msg = f"No function found at address: {function_address}"
+            raise OperationError(msg)
+        return self.database.functions.does_return(resolved)
+
+    @operation()
+    def get_flags(self, function_address: HexEA) -> list[str]:
+        """Get the function attribute flags (LIB, THUNK, NORET, etc.) at the specified address.
+
+        :param function_address: The effective address of the function.
+        :return: List of FunctionFlags member names that are set on the function.
+        :raises OperationException: If no function exists at the given address.
+        """
+        resolved = self.database.functions.get_at(function_address.ea_t)
+        if not resolved:
+            msg = f"No function found at address: {function_address}"
+            raise OperationError(msg)
+        flags = self.database.functions.get_flags(resolved)
+        return [flag.name for flag in FunctionFlags if flag in flags]
+
+    @operation(options=[PaginatedParameter()])
+    def get_local_variables(self, function_address: HexEA) -> list[LocalVariableData]:
+        """Get all local variables (including arguments) for the function at the specified address.
+
+        :param function_address: The effective address of the function.
+        :return: List of LocalVariableData objects with name, type, size, and argument/result flags.
+        :raises OperationException: If no function exists at the given address.
+        """
+        resolved = self.database.functions.get_at(function_address.ea_t)
+        if not resolved:
+            msg = f"No function found at address: {function_address}"
+            raise OperationError(msg)
+        return [LocalVariableData.from_ida(lvar) for lvar in self.database.functions.get_local_variables(resolved)]
+
+    @operation(options=[PaginatedParameter()])
+    def get_local_variable_references(
+        self, function_address: HexEA, variable_name: str
+    ) -> list[LocalVariableReferenceData]:
+        """Get all references to a named local variable inside the function's pseudocode.
+
+        :param function_address: The effective address of the function.
+        :param variable_name: Name of the local variable to find references for.
+        :return: List of LocalVariableReferenceData objects describing each reference site.
+        :raises OperationException: If the function or variable is not found.
+        """
+        resolved = self.database.functions.get_at(function_address.ea_t)
+        if not resolved:
+            msg = f"No function found at address: {function_address}"
+            raise OperationError(msg)
+        try:
+            lvar = self.database.functions.get_local_variable_by_name(resolved, variable_name)
+        except KeyError as exc:
+            msg = f"Local variable '{variable_name}' not found in function at {function_address}"
+            raise OperationError(msg) from exc
+        if lvar is None:
+            msg = f"Local variable '{variable_name}' not found in function at {function_address}"
+            raise OperationError(msg)
+        return [
+            LocalVariableReferenceData.from_ida(ref)
+            for ref in self.database.functions.get_local_variable_references(resolved, lvar)
+        ]
 
     @operation()
     def get_signature(self, function_address: HexEA) -> str:

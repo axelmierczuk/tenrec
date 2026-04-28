@@ -363,22 +363,60 @@ class TestFunctionsPlugin:
     def test_get_pseudocode_joins_lines(self, plugin, mock_func_t):
         """Test that get_pseudocode() joins lines with newlines."""
         plugin.database.functions.get_at.return_value = mock_func_t
-        plugin.database.functions.get_pseudocode.return_value = ["int test_function() {", "    return 42;", "}"]
+        plugin.database.pseudocode.get_text.return_value = ["int test_function() {", "    return 42;", "}"]
 
         result = plugin.get_pseudocode(HexEA(0x401000))
 
         assert result == "int test_function() {\n    return 42;\n}"
-        plugin.database.functions.get_pseudocode.assert_called_once_with(mock_func_t, True)
+        plugin.database.pseudocode.get_text.assert_called_once_with(mock_func_t, True)
 
     @pytest.mark.unit
     def test_get_pseudocode_passes_remove_tags_parameter(self, plugin, mock_func_t):
         """Test that get_pseudocode() passes remove_tags parameter correctly."""
         plugin.database.functions.get_at.return_value = mock_func_t
-        plugin.database.functions.get_pseudocode.return_value = ["code"]
+        plugin.database.pseudocode.get_text.return_value = ["code"]
 
         plugin.get_pseudocode(HexEA(0x401000), remove_tags=False)
 
-        plugin.database.functions.get_pseudocode.assert_called_once_with(mock_func_t, False)
+        plugin.database.pseudocode.get_text.assert_called_once_with(mock_func_t, False)
+
+    # ========================================================================
+    # Test decompile_many - Tests batch decompilation
+    # ========================================================================
+
+    @pytest.mark.unit
+    def test_decompile_many_returns_address_keyed_text(self, plugin):
+        """decompile_many() should return a dict mapping each function start_ea to its text."""
+        func1 = Mock(start_ea=0x401000)
+        func2 = Mock(start_ea=0x402000)
+        plugin.database.functions.get_at.side_effect = [func1, func2]
+
+        decomp1 = Mock()
+        decomp1.to_text.return_value = ["int f1() {", "  return 1;", "}"]
+        decomp2 = Mock()
+        decomp2.to_text.return_value = ["int f2() {", "  return 2;", "}"]
+        plugin.database.pseudocode.decompile_many.return_value = [decomp1, decomp2]
+
+        result = plugin.decompile_many([HexEA(0x401000), HexEA(0x402000)])
+
+        assert result == {
+            HexEA(0x401000): "int f1() {\n  return 1;\n}",
+            HexEA(0x402000): "int f2() {\n  return 2;\n}",
+        }
+        plugin.database.pseudocode.decompile_many.assert_called_once_with([func1, func2])
+        decomp1.to_text.assert_called_once_with(True)
+        decomp2.to_text.assert_called_once_with(True)
+
+    @pytest.mark.unit
+    def test_decompile_many_raises_on_missing_function(self, plugin):
+        """decompile_many() should raise if any address has no function."""
+        plugin.database.functions.get_at.return_value = None
+
+        with pytest.raises(OperationError) as exc_info:
+            plugin.decompile_many([HexEA(0x401000)])
+
+        assert "No function found at address: 0x401000" in str(exc_info.value)
+        plugin.database.pseudocode.decompile_many.assert_not_called()
 
     # ========================================================================
     # Test get_signature - Tests error handling
@@ -461,3 +499,28 @@ class TestFunctionsPlugin:
             plugin.rename_local_variable(HexEA(0x401000), "old_var", "new_var")
 
         assert "Failed to rename local variable: old_var" in str(exc_info.value)
+
+    # ========================================================================
+    # Test get_data_items - Tests data item enumeration
+    # ========================================================================
+
+    @pytest.mark.unit
+    def test_get_data_items_returns_addresses(self, plugin, mock_func_t):
+        """get_data_items() should return HexEA addresses for embedded data."""
+        plugin.database.functions.get_at.return_value = mock_func_t
+        plugin.database.functions.get_data_items.return_value = [0x401040, 0x401048]
+
+        result = plugin.get_data_items(HexEA(0x401000))
+
+        assert result == [HexEA(0x401040), HexEA(0x401048)]
+        plugin.database.functions.get_data_items.assert_called_once_with(mock_func_t)
+
+    @pytest.mark.unit
+    def test_get_data_items_raises_on_missing_function(self, plugin):
+        """get_data_items() should raise when function not found."""
+        plugin.database.functions.get_at.return_value = None
+
+        with pytest.raises(OperationError) as exc_info:
+            plugin.get_data_items(HexEA(0x401000))
+
+        assert "No function found at address: 0x401000" in str(exc_info.value)
