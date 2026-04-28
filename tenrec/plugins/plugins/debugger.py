@@ -162,13 +162,27 @@ class DebuggerPlugin(PluginBase):
         ),
         interaction_style=[
             "In headless idalib, call load_backend() once before start_process() — no debugger is loaded by default",
+            (
+                "Pick the backend by matching the database's binary format: PE → 'win32', "
+                "ELF → 'linux_user', Mach-O arm64 → 'arm_mac', Mach-O x86_64 → 'mac_user'. "
+                "For a gdbserver/debugserver bridge, use 'gdb' with remote=True + host/port instead."
+            ),
+            "Omit name from load_backend() only when the database's target matches the host running IDA",
             "Always check is_running() before issuing live operations (registers, memory, stepping)",
             "Breakpoint set/list/remove operations work even when no debugger is attached",
             "Live operations raise OperationError with a 'no active debugger' message when off",
             "Pause the process before reading registers or memory — values are only coherent when suspended",
         ],
         examples=[
-            "Load default local backend: `debugger_load_backend()`",
+            "Local debug on the same host: `debugger_load_backend()`",
+            (
+                "Linux ELF over gdbserver: "
+                "`debugger_load_backend(name='gdb', remote=True, host='localhost', port=31337)`"
+            ),
+            (
+                "Windows PE under win32_remote.exe: "
+                "`debugger_load_backend(name='win32', remote=True, host='10.0.0.5', port=23946)`"
+            ),
             "Set a breakpoint at main: `debugger_set_breakpoint(0x401000)`",
             "List active breakpoints: `debugger_list_breakpoints()`",
             "Step over: `debugger_step_over()`",
@@ -178,6 +192,7 @@ class DebuggerPlugin(PluginBase):
         anti_examples=[
             "DON'T call read_memory or get_registers without first verifying the process is suspended",
             "DON'T call start_process under idalib without calling load_backend() first — it will return -1",
+            "DON'T pick a backend that doesn't match the database's binary format (e.g. 'win32' on an ELF target)",
             "DON'T rely on memory reads while the process is running — values may be stale",
         ],
     )
@@ -195,20 +210,60 @@ class DebuggerPlugin(PluginBase):
         """Load an IDA debugger backend and optionally configure a remote endpoint.
 
         In headless ``idalib`` no debugger plugin is loaded by default, so ``start_process`` and
-        ``attach`` return -1 until you call this. Pass ``name`` to pick an explicit backend
-        (basename of the IDA plugin file — e.g. ``arm_mac``, ``linux_user``, ``win32``, ``gdb``);
-        omit ``name`` to auto-select a sensible default for the host platform.
+        ``attach`` return -1 until you call this.
 
-        For headless workflows on platforms where the local debugger needs special entitlements
-        (notably macOS arm64), pair ``name="gdb"``/``remote=True`` with a pre-launched ``debugserver``
-        and pass ``host``/``port`` here so subsequent ``attach`` / ``start_process`` calls route
-        through the gdb-remote bridge.
+        ## How to pick ``name``
 
-        :param name: Backend plugin basename, or None to auto-select for the host.
-        :param remote: True for the remote-debugger stub variant; False for the local debugger.
-        :param host: Optional remote-debugger hostname; configured via set_remote_debugger.
-        :param port: Optional remote-debugger TCP port (only used when host is set).
-        :param password: Optional remote-debugger password (only used when host is set).
+        Match the database's binary format (visible via ``database.metadata``) to the IDA
+        debugger plugin that knows how to drive that target:
+
+        =========== ================================== ===========================================
+        Target      Backend name                       Notes
+        =========== ================================== ===========================================
+        PE / Win    ``win32``                          x86/x86_64 Windows local + remote
+        ELF / Linux ``linux_user``                     local on Linux only; use ``gdb`` elsewhere
+        Mach-O ARM  ``arm_mac``                        Apple Silicon
+        Mach-O x86  ``mac_user``                       Intel macs (older IDA builds)
+        Any         ``gdb``                            anything reachable via gdbserver/debugserver
+        =========== ================================== ===========================================
+
+        Omit ``name`` only when the database's target matches the host running IDA — the
+        plugin then auto-selects the local backend for the host platform.
+
+        ## Local vs remote
+
+        Set ``remote=False`` (default) for the local-debugger plugin variant. Set ``remote=True``
+        plus ``host``/``port`` when you're connecting to a debug server elsewhere:
+
+        * IDA's own remote stubs: ``mac_server_arm``, ``win32_remote.exe``, ``linux_server`` —
+          pair the matching ``name`` (``arm_mac``/``win32``/``linux_user``) with ``remote=True``.
+        * gdbserver / lldb's debugserver / any gdb-remote stub — use ``name="gdb"``,
+          ``remote=True``. Same protocol works against Linux ELFs, Windows PEs (via MSYS2's
+          gdbserver), and BSD targets.
+
+        ## Examples
+
+        Local debug on the same host as IDA::
+
+            debugger.load_backend()  # auto-select
+
+        Attach to a Linux ELF running under gdbserver in Docker::
+
+            debugger.load_backend(name="gdb", remote=True, host="localhost", port=31337)
+
+        Drive a Windows VM via IDA's win32_remote.exe::
+
+            debugger.load_backend(name="win32", remote=True, host="10.0.0.5", port=23946)
+
+        :param name: Backend plugin basename. Omit to auto-select for the host platform; pass
+            an explicit value when the database's target doesn't match the host (e.g. analysing
+            a Linux ELF from macOS) or when you want gdb-remote regardless of target.
+        :param remote: True selects the backend's remote-stub variant; False (default) selects
+            the local debugger that runs in the same process as IDA.
+        :param host: Remote-debugger hostname. Only used when set; routes subsequent attach /
+            start_process calls through ``set_remote_debugger``.
+        :param port: Remote-debugger TCP port. Only used when ``host`` is set.
+        :param password: Optional remote-debugger password. Only used when ``host`` is set.
         :return: The name of the backend that was loaded.
         :raises OperationException: If IDA refuses to load the requested backend.
         """
