@@ -1,5 +1,6 @@
 from .bytes import plugin as bytes_plugin
 from .comments import plugin as comments_plugin
+from .debugger import plugin as debugger_plugin
 from .entries import plugin as entries_plugin
 from .functions import plugin as functions_plugin
 from .imports import plugin as imports_plugin
@@ -12,6 +13,7 @@ from .xrefs import plugin as xrefs_plugin
 DEFAULT_PLUGINS = [
     bytes_plugin,
     comments_plugin,
+    debugger_plugin,
     entries_plugin,
     functions_plugin,
     imports_plugin,

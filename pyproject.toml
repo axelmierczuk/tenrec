@@ -73,6 +73,7 @@ dev = [
 [project.entry-points."tenrec.plugins"]
 bytes = "tenrec.plugins.plugins.bytes:BytesPlugin"
 comments = "tenrec.plugins.plugins.comments:CommentsPlugin"
+debugger = "tenrec.plugins.plugins.debugger:DebuggerPlugin"
 entries = "tenrec.plugins.plugins.entries:EntriesPlugin"
 functions = "tenrec.plugins.plugins.functions:FunctionsPlugin"
 imports = "tenrec.plugins.plugins.imports:ImportsPlugin"
