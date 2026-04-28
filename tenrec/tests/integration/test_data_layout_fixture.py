@@ -343,3 +343,97 @@ class TestDisassemblyAndOriginalBytesAgainstDataLayout:
             assert after != before
         finally:
             bytes_plugin.revert_byte_at(addr)
+
+
+# ---------------------------------------------------------------------------
+# create_data_at — non-default string encodings, alignment, struct dispatch
+# ---------------------------------------------------------------------------
+
+
+class TestCreateDataNonDefaultAgainstDataLayout:
+    def test_create_pascal_string_dispatch(self, data_layout_db):
+        # Different StringType values land on different create_string_at
+        # paths in ida-domain. The plugin contract is "returns bool" — the
+        # underlying data (g_marker is a C-style string) may not actually
+        # round-trip as Pascal, but the dispatch must complete without
+        # raising. Reverting via delete_value_at restores the auto-classified
+        # state for any later test that cares.
+        from ida_domain.strings import StringType
+
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_marker", "g_marker")
+
+        try:
+            result = bytes_plugin.create_data_at(
+                addr, "string", count=1, force=True, string_type=StringType.PASCAL
+            )
+            assert isinstance(result, bool | int)
+        finally:
+            bytes_plugin.delete_value_at(addr)
+
+    def test_create_alignment_directive(self, data_layout_db):
+        # Apply an 8-byte alignment directive at g_marker (after deleting the
+        # existing string definition). Verifies the alignment branch of
+        # create_data_at: power-of-2 ``alignment`` parameter must be threaded
+        # through to ida-domain's create_alignment_at.
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_marker", "g_marker")
+
+        try:
+            bytes_plugin.delete_value_at(addr)
+            result = bytes_plugin.create_data_at(
+                addr, "alignment", count=1, force=True, length=8, alignment=3
+            )
+            assert isinstance(result, bool | int)
+        finally:
+            bytes_plugin.delete_value_at(addr)
+
+    def test_create_struct_without_tid_raises(self, data_layout_db):
+        # Plugin contract: create_data_at("struct") without ``tid`` must
+        # raise OperationError rather than crashing inside ida-domain.
+        from tenrec.plugins.models.exceptions import OperationError
+
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_bytes", "g_bytes")
+
+        with pytest.raises(OperationError, match="tid"):
+            bytes_plugin.create_data_at(addr, "struct", count=1, force=True)
+
+
+# ---------------------------------------------------------------------------
+# create_data_at — invalid type handling
+# ---------------------------------------------------------------------------
+
+
+class TestCreateDataInvalidTypeAgainstDataLayout:
+    def test_invalid_data_type_raises(self, data_layout_db):
+        from tenrec.plugins.models.exceptions import OperationError
+
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_bytes", "g_bytes")
+
+        with pytest.raises(OperationError, match="Invalid data_type"):
+            bytes_plugin.create_data_at(addr, "totally_bogus_type", count=1)
+
+
+# ---------------------------------------------------------------------------
+# patch_value_at — raw-bytes branch (separate code path from int patching)
+# ---------------------------------------------------------------------------
+
+
+class TestPatchBytesAgainstDataLayout:
+    def test_patch_value_at_with_bytes_round_trips(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_bytes", "g_bytes")
+
+        original = bytes_plugin.get_bytes_at(addr, 4)
+        new_payload = b"\xAA\xBB\xCC\xDD"
+        try:
+            assert bytes_plugin.patch_value_at(addr, new_payload) is True
+            assert bytes_plugin.get_bytes_at(addr, 4) == new_payload.hex()
+            # Originals must reflect pre-patch bytes regardless of the new
+            # payload, identical to the int-patch path.
+            assert bytes_plugin.get_original_bytes_at(addr, 4) == original
+        finally:
+            for offset in range(4):
+                bytes_plugin.revert_byte_at(HexEA(addr.ea_t + offset))

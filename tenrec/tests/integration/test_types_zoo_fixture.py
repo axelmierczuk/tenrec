@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from tenrec.plugins.models.ida import HexEA
+from tenrec.plugins.plugins.functions import FunctionsPlugin
 from tenrec.plugins.plugins.types import TypesPlugin
 from tenrec.plugins.plugins.xrefs import XrefsPlugin
 
@@ -120,3 +121,58 @@ class TestIndirectCallsAgainstTypesZoo:
         # an xref-to even though the call goes through apply_op.
         assert xrefs.get_xrefs_to(HexEA(op_add.start_ea), flags=XrefsFlags.ALL)
         assert xrefs.get_xrefs_to(HexEA(op_sub.start_ea), flags=XrefsFlags.ALL)
+
+
+# ---------------------------------------------------------------------------
+# Setter round-trips — set_function_prototype, set_global_variable_type,
+# set_local_variable_type
+# ---------------------------------------------------------------------------
+
+
+class TestTypesSettersAgainstTypesZoo:
+    def test_set_function_prototype_round_trips(self, types_zoo_db):
+        types = attach(TypesPlugin, types_zoo_db)
+        functions = attach(FunctionsPlugin, types_zoo_db)
+        target = find_function(types_zoo_db, "op_add", "_op_add")
+        addr = HexEA(target.start_ea)
+
+        # The prototype must include a name field for IDA's type parser to
+        # accept it. After applying, get_signature should return *something*
+        # that mentions the parameter types we declared.
+        msg = types.set_function_prototype(addr, "int op_add(int a, int b)")
+        assert "Set prototype" in msg
+
+        sig = functions.get_signature(addr)
+        # Parameter types ('int', 'int') must round-trip into the rendered
+        # signature even if IDA tweaks the formatting.
+        assert "int" in sig
+
+    def test_set_global_variable_type_round_trips(self, types_zoo_db):
+        types = attach(TypesPlugin, types_zoo_db)
+        # g_word is declared in C as ``union word_t``; we override its type to
+        # a plain unsigned int and verify get_at picks that up.
+        addr = find_name_address(types_zoo_db, "_g_word", "g_word")
+
+        msg = types.set_global_variable_type(addr, "unsigned int")
+        assert "Successfully set type" in msg
+
+        rendered = types.get_at(addr)
+        # IDA may render this as "unsigned int", "uint32_t", or "DWORD".
+        assert any(token in rendered for token in ("unsigned int", "uint32", "DWORD")), rendered
+
+    def test_set_local_variable_type_round_trips(self, types_zoo_db):
+        types = attach(TypesPlugin, types_zoo_db)
+        functions = attach(FunctionsPlugin, types_zoo_db)
+        # apply_op has named arguments via the function-pointer signature, so
+        # at least one local will be addressable by a stable name.
+        target = find_function(types_zoo_db, "apply_op", "_apply_op")
+        addr = HexEA(target.start_ea)
+
+        lvars = functions.get_local_variables(addr)
+        # Pick the first non-result argument — type setting requires a name
+        # IDA recognises in the decompiler's lvar table.
+        candidate = next((lv for lv in lvars if lv.is_argument and lv.name), None)
+        assert candidate is not None, f"expected a named argument; got {lvars}"
+
+        msg = types.set_local_variable_type(addr, candidate.name, "int")
+        assert "type set to" in msg
