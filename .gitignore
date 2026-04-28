@@ -301,3 +301,17 @@ http-client.private.env.json
 # Apifox Helper cache
 .idea/.cache/.Apifox_Helper
 .idea/ApifoxUploaderProjectSetting.xml
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# IDA database sidecars (anywhere in the tree, not just fixtures/databases/).
+# Opening any binary with IDA writes these next to the source file.
+*.i64
+*.idb
+*.id0
+*.id1
+*.id2
+*.nam
+*.til

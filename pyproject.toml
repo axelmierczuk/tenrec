@@ -82,3 +82,13 @@ strings = "tenrec.plugins.plugins.strings:StringsPlugin"
 types = "tenrec.plugins.plugins.types:TypesPlugin"
 xrefs = "tenrec.plugins.plugins.xrefs:XrefsPlugin"
 
+[tool.coverage.run]
+# IDA's `idapro` C extension calls sys.settrace(None) on import, which wipes
+# coverage.py's default C tracer and produces bogus 0–1% reports for any
+# code reached after a Database.open(). The sys.monitoring backend (PEP 669,
+# Python 3.12+) hooks the interpreter at a lower level that IDA doesn't
+# touch, so coverage measurements survive the IDA import.
+core = "sysmon"
+source = ["tenrec"]
+omit = ["tenrec/tests/*"]
+

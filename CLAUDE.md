@@ -96,6 +96,33 @@ Key fixtures: `mock_ida_database`, `mock_database_handler`, `mock_function_data`
 IDADIR="/path/to/ida" uv run pytest tenrec/tests/ -m unit
 ```
 
+Integration tests in `tenrec/tests/integration/` open real IDA databases
+built from C fixtures under `tenrec/tests/fixtures/sources/`. Build the
+fixtures once before running:
+
+```bash
+IDADIR="/path/to/ida" python tenrec/tests/fixtures/build_fixtures.py
+IDADIR="/path/to/ida" uv run pytest tenrec/tests/ -m fixture
+```
+
+### Coverage caveat — IDA wipes `sys.settrace`
+
+IDA's `idapro` C extension calls `sys.settrace(None)` on import, which
+disables coverage.py's default C tracer and produces bogus 0–1% reports
+for any code reached after `Database.open()`. The repo works around this
+by configuring the `sys.monitoring` backend (PEP 669, Python 3.12+) in
+`pyproject.toml`:
+
+```toml
+[tool.coverage.run]
+core = "sysmon"
+```
+
+This is hooked at a lower interpreter level that IDA doesn't touch, so
+`pytest --cov` reports real numbers automatically. **Don't switch back to
+the default tracer** without re-checking coverage on a fixture test —
+otherwise coverage will silently regress to ~0%.
+
 See [agent_docs/testing.md](agent_docs/testing.md) for patterns.
 
 ## Common Tasks
