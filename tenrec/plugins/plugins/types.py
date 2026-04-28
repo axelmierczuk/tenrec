@@ -253,10 +253,10 @@ class TypesPlugin(PluginBase):
             msg = f"Parsed type is empty or invalid: '{new_type}'"
             raise OperationError(msg)
 
-        var_name = ida_name.get_name(variable_address) or f"var_{variable_address:X}"
+        var_name = ida_name.get_name(variable_address.ea_t) or f"var_{variable_address.ea_t:X}"
         apply_flags = ida_typeinf.TINFO_DEFINITE | ida_typeinf.TINFO_DELAYFUNC
 
-        if not ida_typeinf.apply_tinfo(variable_address, tif, apply_flags):
+        if not ida_typeinf.apply_tinfo(variable_address.ea_t, tif, apply_flags):
             msg = (
                 f"Failed to apply type '{new_type}' to global variable '{var_name}' at {variable_address}. "
                 f"This might be due to size conflicts or invalid type for this location."
