@@ -160,22 +160,52 @@ def temp_database_dir() -> Generator[Path]:
     shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-@pytest.fixture
-def test_database_path() -> Path:
-    """Returns path to a test database fixture (if exists)."""
-    db_path = Path(__file__).parent / "fixtures" / "databases" / "test_binary.i64"
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+FIXTURE_DATABASES_DIR = FIXTURES_DIR / "databases"
+
+
+def fixture_database_path(name: str) -> Path:
+    """Locate a built fixture database by target name.
+
+    Skips the calling test if the fixture has not been built yet (run
+    ``python tenrec/tests/fixtures/build_fixtures.py`` to produce it).
+    """
+    db_path = FIXTURE_DATABASES_DIR / f"{name}.i64"
     if not db_path.exists():
-        pytest.skip(f"Test database fixture not found at {db_path}")
+        pytest.skip(
+            f"Fixture database '{name}.i64' not found. Run "
+            f"'python tenrec/tests/fixtures/build_fixtures.py' to build it."
+        )
     return db_path
 
 
-@pytest.fixture
-def test_binary_path() -> Path:
-    """Returns path to a test binary fixture (if exists)."""
-    binary_path = Path(__file__).parent / "fixtures" / "binaries" / "test_binary.exe"
-    if not binary_path.exists():
-        pytest.skip(f"Test binary fixture not found at {binary_path}")
-    return binary_path
+def _make_db_fixture(target_name: str):
+    """Create a function-scoped fixture that yields an opened ``Database``.
+
+    Each fixture opens the on-disk ``.i64`` with ``save_on_close=False`` so
+    write-tests (set_name, set_comment, declare_c_type, ...) can mutate the
+    in-memory database freely without persisting changes back to the file.
+    Combined with the ``restore_*`` helpers, this gives us write-test
+    isolation for free across the entire integration suite.
+    """
+
+    @pytest.fixture
+    def db_fixture(ida_options) -> Generator[Database]:
+        path = fixture_database_path(target_name)
+        db = Database()
+        db.open(str(path), ida_options, save_on_close=False)
+        try:
+            yield db
+        finally:
+            db.close(save=False)
+
+    db_fixture.__name__ = f"{target_name}_db"
+    return db_fixture
+
+
+basic_db = _make_db_fixture("basic")
+types_zoo_db = _make_db_fixture("types_zoo")
+data_layout_db = _make_db_fixture("data_layout")
 
 
 # ============================================================================
@@ -199,20 +229,6 @@ def ida_options_with_analysis() -> IdaCommandOptions:
 
 
 # ============================================================================
-# Integration Test Fixtures
-# ============================================================================
-
-
-@pytest.fixture
-def real_database_handler(test_database_path, ida_options) -> Generator[DatabaseHandler]:
-    """Creates a real DatabaseHandler with an actual IDA database (for integration tests)."""
-    handler = DatabaseHandler(str(test_database_path), ida_options)
-    handler.open(analyze=False)
-    yield handler
-    handler.close()
-
-
-# ============================================================================
 # Plugin Fixtures
 # ============================================================================
 
@@ -231,14 +247,4 @@ def mock_plugin_base():
     return MockPlugin
 
 
-# ============================================================================
-# Test Markers
-# ============================================================================
-
-
-def pytest_configure(config):
-    """Register custom markers."""
-    config.addinivalue_line("markers", "unit: Unit tests that don't require IDA databases")
-    config.addinivalue_line("markers", "integration: Integration tests with real IDA databases")
-    config.addinivalue_line("markers", "slow: Tests that take a long time to run")
-    config.addinivalue_line("markers", "fixture: Tests that require pre-built database fixtures")
+# Markers are now declared in pytest.ini.

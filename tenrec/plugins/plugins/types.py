@@ -80,31 +80,36 @@ class TypesPlugin(PluginBase):
 
     @operation()
     def get_at(self, address: HexEA) -> str:
-        """Get the type information of the item at the given address as a C declaration string.
+        """Get the type at an address as a single-line C reference (e.g., ``"my_struct;"``).
+
+        Returns the *reference* form of the type, not its full body — the most useful answer to
+        "what type is here?" is the type's name. For a full struct/union/enum layout, look the
+        type up with ``get_by_name`` instead.
 
         :param address: The effective address to inspect.
-        :return: One-line C declaration of the type at the address.
+        :return: One-line C declaration referencing the type at the address.
         :raises OperationException: If no type is set at the address.
         """
         tif = self.database.types.get_at(address.ea_t)
         if tif is None:
             msg = f"No type information at address: {address}"
             raise OperationError(msg)
-        return tif._print(None, ti.PRTYPE_1LINE | ti.PRTYPE_TYPE | ti.PRTYPE_SEMI) or tif.dstr()
+        one_line_flags = ti.PRTYPE_1LINE | ti.PRTYPE_TYPE | ti.PRTYPE_SEMI
+        return tif._print(None, one_line_flags) or tif.dstr() or ""
 
     @operation()
     def get_by_name(self, name: str) -> str:
         """Look up a named type and return its C declaration.
 
         :param name: Name of the type (e.g., "MyStruct", "DWORD").
-        :return: One-line C declaration of the named type.
+        :return: C declaration of the named type, including struct/union/enum bodies when applicable.
         :raises OperationException: If no type with this name exists.
         """
         tif = self.database.types.get_by_name(name)
         if tif is None:
             msg = f"Type '{name}' not found"
             raise OperationError(msg)
-        return tif._print(None, ti.PRTYPE_1LINE | ti.PRTYPE_TYPE | ti.PRTYPE_SEMI) or tif.dstr()
+        return _format_type(tif, type_name=name)
 
     @operation()
     def declare_c_type(self, c_declaration: str) -> str:
@@ -464,5 +469,28 @@ class TypesPlugin(PluginBase):
             except Exception:
                 # intentionally skip broken/partial entries and keep going
                 continue
+
+def _format_type(tif: ti.tinfo_t, type_name: str | None = None) -> str:
+    """Render a tinfo_t as a C declaration string, including compound bodies.
+
+    Without ``PRTYPE_DEF``, IDA's _print() emits a *reference* to the type
+    (just the name) rather than its full layout — which makes results like
+    ``"my_struct;"`` useless to callers. Always request the body, then fall
+    back to dstr() if the formatter declines. When the caller supplies a
+    ``type_name`` it is woven into the rendered output so consumers can see
+    which type the body belongs to.
+    """
+    full_flags = ti.PRTYPE_MULTI | ti.PRTYPE_TYPE | ti.PRTYPE_SEMI | ti.PRTYPE_DEF
+    one_line_flags = ti.PRTYPE_1LINE | ti.PRTYPE_TYPE | ti.PRTYPE_SEMI
+
+    # Compound types (struct/union/enum) need PRTYPE_DEF for their body.
+    is_compound = tif.is_udt() or tif.is_enum()
+    primary_flags = full_flags if is_compound else one_line_flags
+
+    rendered = tif._print(type_name, primary_flags)
+    if rendered:
+        return str(rendered)
+    return tif.dstr() or ""
+
 
 plugin = TypesPlugin()

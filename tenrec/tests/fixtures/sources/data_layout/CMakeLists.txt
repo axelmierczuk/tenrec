@@ -1,0 +1,2 @@
+add_executable(data_layout data_layout.c)
+tenrec_apply_fixture_flags(data_layout)
