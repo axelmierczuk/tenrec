@@ -3,8 +3,10 @@ Pytest configuration and shared fixtures for IDA MCP server tests.
 """
 
 import shutil
+import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, Mock
@@ -206,6 +208,184 @@ def _make_db_fixture(target_name: str):
 basic_db = _make_db_fixture("basic")
 types_zoo_db = _make_db_fixture("types_zoo")
 data_layout_db = _make_db_fixture("data_layout")
+linux_debugger_db = _make_db_fixture("linux_debugger")
+windows_debugger_db = _make_db_fixture("windows_debugger")
+
+
+# ============================================================================
+# Docker-backed live-debugger fixtures
+# ============================================================================
+#
+# The gdbserver-in-container path is the canonical headless live-debugger
+# environment for tenrec — IDA can attach to a remote process over
+# gdb-remote from any host platform without entitlement gymnastics. The
+# fixture images are built by build_fixtures.py and each contain a small
+# binary plus gdbserver pre-launching it.
+#
+# Two variants:
+#   * tenrec-fixture-linux_debugger — Linux ELF, runs on any docker daemon
+#   * tenrec-fixture-windows_debugger — Windows PE, only runs on a docker
+#     daemon in Windows-container mode (Windows host required)
+
+
+def _docker_available() -> bool:
+    """Return True if the docker CLI is on PATH and the daemon is reachable."""
+    if shutil.which("docker") is None:
+        return False
+    try:
+        subprocess.run(
+            ["docker", "info"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return False
+    return True
+
+
+def _docker_os_type() -> str | None:
+    """Return the daemon's container OS type ("linux" / "windows"), or None."""
+    if not _docker_available():
+        return None
+    try:
+        result = subprocess.run(
+            ["docker", "info", "--format", "{{.OSType}}"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout.strip() or None
+
+
+def _docker_image_exists(tag: str) -> bool:
+    """Return True if a local docker image with ``tag`` is present."""
+    result = subprocess.run(
+        ["docker", "image", "inspect", tag],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return result.returncode == 0
+
+
+def _free_tcp_port() -> int:
+    """Bind to port 0, learn the assigned port, release it for the caller."""
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _wait_for_listener(host: str, port: int, timeout: float = 10.0) -> None:
+    """Block until ``host:port`` accepts a TCP connection or fail.
+
+    Windows containers cold-start much slower than Linux ones (the OS
+    image takes seconds to spin up the user process), so callers can
+    extend the timeout for that path.
+    """
+    import socket
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                return
+        except OSError:
+            time.sleep(0.1)
+    msg = f"Container never listened on {host}:{port}"
+    raise RuntimeError(msg)
+
+
+def _spawn_gdbserver_container(
+    image: str, required_os: str, listen_timeout: float
+) -> Generator[tuple[str, int]]:
+    """Shared lifecycle for a fixture container that publishes gdbserver.
+
+    All variants follow the same pattern: pick a free TCP port, run the
+    image with `-p host_port:31337`, wait until the listener is up, hand
+    `(host, port)` to the test, and tear the container down on exit.
+    The only thing that changes between Linux and Windows is the image
+    tag and the required daemon OS — factored out so adding a third
+    platform stays a one-liner.
+    """
+    if not _docker_available():
+        pytest.skip("Docker daemon unreachable; install Docker / start colima.")
+    daemon_os = _docker_os_type()
+    if daemon_os != required_os:
+        pytest.skip(
+            f"Image {image!r} requires docker OSType={required_os!r}, "
+            f"daemon reports {daemon_os!r}. Run on a host with a matching "
+            "container runtime (Windows host for Windows containers)."
+        )
+    if not _docker_image_exists(image):
+        pytest.skip(
+            f"Docker image {image!r} not present. Run "
+            "'python tenrec/tests/fixtures/build_fixtures.py' on a host "
+            f"with docker OSType={required_os!r} to build it."
+        )
+
+    host = "127.0.0.1"
+    port = _free_tcp_port()
+    name = f"tenrec-gdbserver-{port}"
+
+    # Defensive cleanup against a stuck leftover from a prior failed run.
+    subprocess.run(
+        ["docker", "rm", "-f", name],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    subprocess.check_call(
+        [
+            "docker", "run", "-d", "--rm",
+            "--name", name,
+            "-p", f"{host}:{port}:31337",
+            image,
+        ],
+        stdout=subprocess.DEVNULL,
+    )
+    try:
+        _wait_for_listener(host, port, timeout=listen_timeout)
+        yield host, port
+    finally:
+        subprocess.run(
+            ["docker", "rm", "-f", name],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+
+@pytest.fixture
+def gdbserver_container() -> Generator[tuple[str, int]]:
+    """Spawn the Linux fixture under gdbserver in Docker; yield ``(host, port)``."""
+    yield from _spawn_gdbserver_container(
+        image="tenrec-fixture-linux_debugger",
+        required_os="linux",
+        listen_timeout=10.0,
+    )
+
+
+@pytest.fixture
+def gdbserver_windows_container() -> Generator[tuple[str, int]]:
+    """Spawn the Windows fixture under gdbserver in Docker; yield ``(host, port)``.
+
+    Skips on any host where the docker daemon isn't running Windows
+    containers — Linux daemons can't launch the ``windows/servercore``
+    base image. The cold-start budget is bigger here than for Linux:
+    Windows containers commonly take 5–15s before user code is reachable.
+    """
+    yield from _spawn_gdbserver_container(
+        image="tenrec-fixture-windows_debugger",
+        required_os="windows",
+        listen_timeout=60.0,
+    )
 
 
 # ============================================================================

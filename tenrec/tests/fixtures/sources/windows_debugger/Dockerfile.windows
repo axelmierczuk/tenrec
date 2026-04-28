@@ -1,0 +1,53 @@
+# Windows-only fixture image: a PE compiled by mingw-w64 (in a Linux build
+# stage so non-Windows hosts can still produce the binary) bundled with
+# gdbserver.exe inside a Windows Server Core runtime layer.
+#
+# `Dockerfile.windows` rather than plain `Dockerfile` because the runtime
+# stage uses `mcr.microsoft.com/windows/...` which only builds and runs
+# on a Windows host with Windows-container mode enabled. The build
+# orchestrator (build_fixtures.py) treats `Dockerfile.windows` as
+# Windows-only and skips it when `docker info` reports OSType=linux.
+#
+# Two-stage build:
+#   1. debian builder cross-compiles debugger.c → debugger.exe with
+#      mingw-w64. Runs on any Linux daemon.
+#   2. servercore runtime layer copies the PE in and downloads a
+#      statically-linked gdbserver.exe from MSYS2's prebuilt mirror so
+#      we don't need pacman/MSYS2 inside the runtime image.
+
+FROM debian:stable-slim AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc-mingw-w64-x86-64 && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+COPY debugger.c .
+# -O0 -g preserves source-level structure for IDA's symbol lookup.
+# -static-libgcc avoids depending on libgcc_s_seh-1.dll being on PATH.
+RUN x86_64-w64-mingw32-gcc -O0 -g -static-libgcc -o debugger.exe debugger.c
+
+FROM mcr.microsoft.com/windows/servercore:ltsc2022
+SHELL ["powershell", "-NoProfile", "-Command"]
+
+# Install MSYS2's gdb (which provides gdbserver.exe). The MSYS2 release
+# tarballs are stable URLs we can curl without invoking pacman. Pinning
+# a specific version means the image build is reproducible — bumping
+# this is an explicit ack that the gdb behaviour might change.
+ARG GDB_VERSION=14.1
+ENV GDB_INSTALL=C:\\gdb
+RUN $url = 'https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gdb-' + $env:GDB_VERSION + '-1-any.pkg.tar.zst'; \
+    Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile gdb.tar.zst; \
+    Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/facebook/zstd/releases/download/v1.5.5/zstd-v1.5.5-win64.zip' -OutFile zstd.zip; \
+    Expand-Archive zstd.zip -DestinationPath C:\\zstd; \
+    & C:\\zstd\\zstd-v1.5.5-win64\\zstd.exe -d gdb.tar.zst -o gdb.tar; \
+    New-Item -ItemType Directory -Force -Path $env:GDB_INSTALL | Out-Null; \
+    tar -xf gdb.tar -C $env:GDB_INSTALL; \
+    Remove-Item gdb.tar, gdb.tar.zst, zstd.zip; \
+    Remove-Item -Recurse C:\\zstd
+
+COPY --from=builder /build/debugger.exe C:/fixture/debugger.exe
+
+EXPOSE 31337
+
+# Default command: pre-launch the binary under gdbserver listening on
+# 0.0.0.0:31337. Same protocol IDA's gdb-remote backend speaks to on
+# Linux, so the integration test code is unchanged.
+CMD ["C:\\gdb\\mingw64\\bin\\gdbserver.exe", "0.0.0.0:31337", "C:\\fixture\\debugger.exe"]
