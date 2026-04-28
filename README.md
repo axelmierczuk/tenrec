@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/axelmierczuk-tenrec-badge.png)](https://mseep.ai/app/axelmierczuk-tenrec)
+
 <p align="center">
   <img alt="logo" src="https://raw.githubusercontent.com/axelmierczuk/tenrec/refs/heads/main/tenrec/documentation/static/_media/icon.svg" width="30%" height="30%">
 </p>
