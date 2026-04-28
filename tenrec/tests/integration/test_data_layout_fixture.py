@@ -157,3 +157,189 @@ class TestPatchRoundTripAgainstDataLayout:
         finally:
             bytes_plugin.revert_byte_at(addr)
         assert bytes_plugin.get_value_at(addr, "byte") == original
+
+
+# ---------------------------------------------------------------------------
+# Floating-point types — apply, classify, read back
+# ---------------------------------------------------------------------------
+
+
+class TestFloatingPointAgainstDataLayout:
+    def test_float_round_trip(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_floats", "g_floats")
+
+        assert bytes_plugin.create_data_at(addr, "float", count=1, force=True) is True
+        assert bytes_plugin.is_type_at(addr, "float") is True
+        assert bytes_plugin.get_data_size_at(addr) == 4
+        assert abs(bytes_plugin.get_value_at(addr, "float") - 3.14) < 0.001
+
+    def test_double_round_trip(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_doubles", "g_doubles")
+
+        assert bytes_plugin.create_data_at(addr, "double", count=1, force=True) is True
+        assert bytes_plugin.is_type_at(addr, "double") is True
+        assert bytes_plugin.get_data_size_at(addr) == 8
+        assert abs(bytes_plugin.get_value_at(addr, "double") - 3.141592653589793) < 1e-12
+
+
+# ---------------------------------------------------------------------------
+# Wide-register types — oword (16 B), yword (32 B)
+# ---------------------------------------------------------------------------
+
+
+class TestWideTypesAgainstDataLayout:
+    def test_oword_round_trip(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_oword", "g_oword")
+
+        assert bytes_plugin.create_data_at(addr, "oword", count=1, force=True) is True
+        assert bytes_plugin.is_type_at(addr, "oword") is True
+        assert bytes_plugin.get_data_size_at(addr) == 16
+
+    def test_yword_round_trip(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_yword", "g_yword")
+
+        assert bytes_plugin.create_data_at(addr, "yword", count=1, force=True) is True
+        assert bytes_plugin.is_type_at(addr, "yword") is True
+        assert bytes_plugin.get_data_size_at(addr) == 32
+
+
+# ---------------------------------------------------------------------------
+# Flag inspection — get_flags_at, get_all_flags_at, has_any_flags_at,
+# check_flags_at, has_user_name_at
+# ---------------------------------------------------------------------------
+
+
+class TestBytesFlagsAgainstDataLayout:
+    def test_get_all_flags_at_is_non_zero_for_known_data(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_bytes", "g_bytes")
+        flags = bytes_plugin.get_all_flags_at(addr)
+        assert int(flags) != 0
+
+    def test_get_flags_at_returns_value(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_bytes", "g_bytes")
+        flags = bytes_plugin.get_flags_at(addr)
+        # IVL/MS_VAL-masked flags; for an initialised data byte this must be
+        # non-zero. The exact value is IDA-internal so we only assert it
+        # surfaces as an integer.
+        assert isinstance(int(flags), int)
+
+    def test_has_any_flags_at_with_full_mask(self, data_layout_db):
+        from ida_domain.bytes import ByteFlags
+
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_bytes", "g_bytes")
+        # Asking "has any of every flag?" must return True for any non-zero
+        # flag set — this round-trips the boolean machinery in the plugin.
+        all_flags = bytes_plugin.get_all_flags_at(addr)
+        assert bytes_plugin.has_any_flags_at(addr, all_flags) is True
+        # And asking for zero flags must return False (no overlap with empty set).
+        assert bytes_plugin.has_any_flags_at(addr, ByteFlags(0)) is False
+
+    def test_check_flags_at_round_trips_masked_view(self, data_layout_db):
+        from ida_domain.bytes import ByteFlags
+
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_bytes", "g_bytes")
+
+        # check_flags_at reads the masked flags (same as get_flags_at) — NOT
+        # the full-flags superset returned by get_all_flags_at. Round-trip
+        # against the masked view: every flag in get_flags_at should pass
+        # check_flags_at, and a known-absent flag should fail.
+        masked = bytes_plugin.get_flags_at(addr)
+        assert bytes_plugin.check_flags_at(addr, masked) is True
+        assert ByteFlags.DATA in masked, f"expected DATA on a global; got {masked!r}"
+        assert bytes_plugin.check_flags_at(addr, ByteFlags.DATA) is True
+        # CODE should not be present on a data byte.
+        assert bytes_plugin.check_flags_at(addr, ByteFlags.CODE) is False
+
+    def test_has_user_name_at_named_global(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_bytes", "g_bytes")
+        assert bytes_plugin.has_user_name_at(addr) is True
+
+
+# ---------------------------------------------------------------------------
+# Predicates we hadn't exercised
+# ---------------------------------------------------------------------------
+
+
+class TestBytesPredicatesExtraAgainstDataLayout:
+    def test_is_value_initialized_at_global(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_bytes", "g_bytes")
+        assert bytes_plugin.is_value_initialized_at(addr) is True
+
+    def test_is_not_tail_at_head(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_bytes", "g_bytes")
+        # Heads are by definition not tails.
+        assert bytes_plugin.is_not_tail_at(addr) is True
+        assert bytes_plugin.is_tail_at(addr) is False
+
+    def test_is_flowed_and_manual_insn_on_main(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        # Walk past the very first instruction of main so we land on a byte
+        # where flow from the previous instruction is well-defined.
+        for func in data_layout_db.functions.get_all():
+            if func.name in {"main", "_main"}:
+                second_instr_ea = data_layout_db.bytes.get_next_head(func.start_ea)
+                addr = HexEA(second_instr_ea)
+                # Both predicates must surface as bools without raising.
+                assert isinstance(bytes_plugin.is_flowed_at(addr), bool)
+                assert isinstance(bytes_plugin.is_manual_insn_at(addr), bool)
+                assert isinstance(bytes_plugin.is_forced_operand_at(addr, 0), bool)
+                return
+        pytest.fail("Expected to find main / _main")
+
+
+# ---------------------------------------------------------------------------
+# Address navigation — get_next_address / get_previous_address
+# ---------------------------------------------------------------------------
+
+
+class TestAddressNavigationExtraAgainstDataLayout:
+    def test_get_next_and_previous_address(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_bytes", "g_bytes")
+
+        nxt = bytes_plugin.get_next_address(addr)
+        assert nxt.ea_t == addr.ea_t + 1
+
+        prev = bytes_plugin.get_previous_address(nxt)
+        assert prev == addr
+
+
+# ---------------------------------------------------------------------------
+# Disassembly + original-bytes accessors
+# ---------------------------------------------------------------------------
+
+
+class TestDisassemblyAndOriginalBytesAgainstDataLayout:
+    def test_get_disassembly_at_main(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        for func in data_layout_db.functions.get_all():
+            if func.name in {"main", "_main"}:
+                line = bytes_plugin.get_disassembly_at(HexEA(func.start_ea))
+                assert line, "expected non-empty disassembly line"
+                return
+        pytest.fail("Expected to find main / _main")
+
+    def test_get_original_bytes_round_trip(self, data_layout_db):
+        bytes_plugin = attach(BytesPlugin, data_layout_db)
+        addr = find_name_address(data_layout_db, "_g_bytes", "g_bytes")
+
+        before = bytes_plugin.get_bytes_at(addr, 4)
+        bytes_plugin.patch_value_at(addr, 0xAA)
+        try:
+            after = bytes_plugin.get_bytes_at(addr, 4)
+            originals = bytes_plugin.get_original_bytes_at(addr, 4)
+            assert before == originals
+            assert after != before
+        finally:
+            bytes_plugin.revert_byte_at(addr)
