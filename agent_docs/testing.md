@@ -235,6 +235,58 @@ Integration tests require:
 2. `IDADIR` environment variable set
 3. Appropriate test markers
 
+## Property-Based Testing
+
+Property tests use [Hypothesis](https://hypothesis.readthedocs.io) to assert
+*invariants* over a generated input space rather than picking specific
+inputs. They live alongside the rest of the suite:
+
+- **Unit-level** (`tenrec/tests/unit/test_property_models.py`) — fast,
+  no IDA, exercises `HexEA` and pydantic model round-trips.
+- **Integration-level** (`tenrec/tests/integration/test_property_*.py`) —
+  marked `fixture`, run against the real IDA databases. Each example
+  reuses the same opened database and undoes its mutation via the
+  `restore_*` context managers.
+
+Strategies are centralised in `tenrec/tests/strategies.py`; reach for
+`valid_c_identifier()`, `hex_ea_value`, `byte_value`, `comment_text`
+before defining your own.
+
+When adding a property test against IDA, set `max_examples=20-30` and
+`deadline=None` and suppress the `function_scoped_fixture` health check —
+each example re-enters IDA, so the Hypothesis defaults (100 examples,
+strict per-example deadline) aren't appropriate.
+
+## Mutation Testing
+
+Mutmut runs the unit suite against systematically-mutated copies of the
+plugin code. Surviving mutants flag weak or missing assertions.
+
+```bash
+uv run mutmut run                   # mutate everything in setup.cfg [mutmut]
+uv run mutmut run --paths-to-mutate tenrec/plugins/plugins/comments.py
+uv run mutmut show <id>             # diff a single mutant against the source
+```
+
+**Known issue on Python 3.13**: `mutmut results` and `mutmut html` raise
+`'QueryResultIterator' object is not iterable` because mutmut 2.x
+predates a pony-orm change. The runs themselves work and write a
+`.mutmut-cache` SQLite file; query it directly to see counts:
+
+```bash
+sqlite3 .mutmut-cache "SELECT status, COUNT(*) FROM Mutant GROUP BY status"
+```
+
+**Interpreting survivors**: the LLM-facing `Instructions` metadata
+(`purpose`, `examples`, `anti_examples`) gets heavy string-mutation
+churn that intentionally isn't covered by unit tests — those strings
+are prompt content, not behavior. Filter by file or by mutation type
+when judging the kill rate; treat conditional/operator mutations as the
+real signal.
+
+Mutation testing is a periodic check, not a per-PR gate. A single
+plugin takes minutes; the full suite takes ~30 min.
+
 ## Testing Custom Plugins
 
 ```python

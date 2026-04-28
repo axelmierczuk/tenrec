@@ -219,7 +219,12 @@ class HexEA(str):
         def _validate(v: str | int | ea_t) -> "HexEA":
             return cls(v)
 
-        return cs.no_info_after_validator_function(_validate, cs.str_schema())
+        # Accept both string and integer inputs at the schema gate. Without
+        # the int branch, deserialising a dict whose addresses are stored as
+        # raw ints (e.g. from a JSON-loaded payload that lost the hex-string
+        # formatting) would fail, even though HexEA itself accepts ints.
+        base = cs.union_schema([cs.str_schema(), cs.int_schema()])
+        return cs.no_info_after_validator_function(_validate, base)
 
     def __repr__(self) -> str:
         return f"{self}"
