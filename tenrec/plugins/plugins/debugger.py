@@ -14,8 +14,10 @@ Two distinct surfaces live here:
 
 from __future__ import annotations
 
+import os
 import platform
 from enum import IntEnum
+from pathlib import Path
 
 import ida_dbg
 import ida_funcs
@@ -96,6 +98,22 @@ class StackFrameData(BaseModel):
     function_name: str | None
 
 
+class BackendInfo(BaseModel):
+    """Discovered debugger backend, suitable as a name argument to load_backend.
+
+    A single backend can ship two plugin files: the ``*_user`` flavour for
+    in-process debugging and the ``*_stub`` flavour for talking to an IDA
+    remote debug server. ``local`` and ``remote`` indicate which variants
+    are actually present on disk; pass ``remote=True`` to load_backend()
+    for the latter.
+    """
+
+    name: str
+    local: bool
+    remote: bool
+    files: list[str]
+
+
 def _require_debugger() -> None:
     """Raise OperationError unless a debugger is attached and queryable."""
     if not ida_dbg.is_debugger_on():
@@ -122,6 +140,56 @@ def _set_breakpoint_enabled(address: HexEA, *, enabled: bool) -> bool:
         msg = f"No breakpoint at {address}"
         raise OperationError(msg)
     return ida_dbg.enable_bpt(address.ea_t, enabled)
+
+
+# Filename suffixes that mark a debugger backend in IDA's plugins/ directory.
+# IDA names them ``<basename>_user.<ext>`` for the in-process debugger and
+# ``<basename>_stub.<ext>`` for the remote-debug stub; the basename is what
+# ``ida_dbg.load_debugger`` accepts as ``dbgname``.
+_DEBUGGER_PLUGIN_SUFFIXES: dict[str, str] = {
+    "_user": "local",
+    "_stub": "remote",
+}
+_DEBUGGER_PLUGIN_EXTENSIONS: frozenset[str] = frozenset({".dylib", ".so", ".dll"})
+
+
+def _ida_plugins_dir() -> Path | None:
+    """Locate IDA's plugins/ directory using IDADIR.
+
+    IDADIR points at the ``MacOS`` (or ``Contents/MacOS``) directory of the
+    IDA install on macOS, the install root on Linux, and the install root
+    on Windows. The ``plugins`` subdirectory is co-located either way.
+    Returns None if IDADIR is unset or the subdirectory doesn't exist —
+    callers raise the user-facing error so the message can be specific.
+    """
+    idadir = os.environ.get("IDADIR")
+    if not idadir:
+        return None
+    plugins = Path(idadir) / "plugins"
+    return plugins if plugins.is_dir() else None
+
+
+def _scan_debugger_plugins(plugins_dir: Path) -> list[BackendInfo]:
+    """Group ``*_user``/``*_stub`` files by basename into BackendInfo records."""
+    backends: dict[str, BackendInfo] = {}
+    for path in sorted(plugins_dir.iterdir()):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in _DEBUGGER_PLUGIN_EXTENSIONS:
+            continue
+        for suffix, kind in _DEBUGGER_PLUGIN_SUFFIXES.items():
+            if path.stem.endswith(suffix):
+                name = path.stem[: -len(suffix)]
+                info = backends.setdefault(
+                    name, BackendInfo(name=name, local=False, remote=False, files=[])
+                )
+                if kind == "local":
+                    info.local = True
+                else:
+                    info.remote = True
+                info.files.append(path.name)
+                break
+    return sorted(backends.values(), key=lambda b: b.name)
 
 
 def _default_local_backend_name() -> str:
@@ -167,6 +235,11 @@ class DebuggerPlugin(PluginBase):
                 "ELF → 'linux_user', Mach-O arm64 → 'arm_mac', Mach-O x86_64 → 'mac_user'. "
                 "For a gdbserver/debugserver bridge, use 'gdb' with remote=True + host/port instead."
             ),
+            (
+                "When load_backend() reports a name isn't loadable, call list_local_backends() to "
+                "see what IDA actually ships in plugins/ — the canonical names drift across "
+                "versions (e.g. on Windows 11 the local x86 debugger is usually 'windbg', not 'win32')."
+            ),
             "Omit name from load_backend() only when the database's target matches the host running IDA",
             "Always check is_running() before issuing live operations (registers, memory, stepping)",
             "Breakpoint set/list/remove operations work even when no debugger is attached",
@@ -175,6 +248,7 @@ class DebuggerPlugin(PluginBase):
         ],
         examples=[
             "Local debug on the same host: `debugger_load_backend()`",
+            "Discover available backend names: `debugger_list_local_backends()`",
             (
                 "Linux ELF over gdbserver: "
                 "`debugger_load_backend(name='gdb', remote=True, host='localhost', port=31337)`"
@@ -271,12 +345,45 @@ class DebuggerPlugin(PluginBase):
         if not ida_dbg.load_debugger(chosen, remote):
             msg = (
                 f"Failed to load debugger backend {chosen!r} (remote={remote}). "
-                "Verify the corresponding plugin file exists in IDA's plugins/ directory."
+                "Call list_local_backends() to see what's actually shipped in IDA's "
+                "plugins/ directory — debugger plugin filenames vary across IDA versions "
+                "(notably 'win32' on Windows 11)."
             )
             raise OperationError(msg)
         if host is not None:
             ida_dbg.set_remote_debugger(host, password, port)
         return chosen
+
+    @operation()
+    def list_local_backends(self) -> list[BackendInfo]:
+        """List debugger backends discoverable in IDA's plugins/ directory.
+
+        Use this when ``load_backend`` returns "Failed to load debugger backend" for a
+        name you expected to work — IDA has renamed and re-arranged debugger plugins
+        across versions, so the documented name may not match what's on disk. The
+        returned ``name`` field is exactly what to pass to ``load_backend``; ``local``
+        and ``remote`` indicate whether ``remote=False`` and ``remote=True`` are
+        valid for that name.
+
+        Examples of what callers typically see:
+
+        * macOS arm64: arm_mac (local + remote), gdb (local), bochs (local), pin (local)
+        * Linux x64: linux (remote), gdb (local), bochs (local)
+        * Windows 11: win32 (remote), windbg (local), gdb (local) — the "win32" local
+          plugin may not be present, in which case the local debugger is named
+          differently (frequently ``windbg``).
+
+        :return: BackendInfo per backend basename, alphabetically sorted.
+        :raises OperationException: If IDA's plugins/ directory can't be located.
+        """
+        plugins_dir = _ida_plugins_dir()
+        if plugins_dir is None:
+            msg = (
+                "Could not locate IDA's plugins/ directory. Set IDADIR to the IDA "
+                "install path (e.g. '/Applications/IDA Professional 9.2.app/Contents/MacOS'."
+            )
+            raise OperationError(msg)
+        return _scan_debugger_plugins(plugins_dir)
 
     @operation(unsafe=True)
     def attach(self, pid: int = -1, event_id: int = -1) -> int:

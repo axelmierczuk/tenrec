@@ -19,11 +19,13 @@ import pytest
 from tenrec.plugins.models.exceptions import OperationError
 from tenrec.plugins.models.ida import HexEA
 from tenrec.plugins.plugins.debugger import (
+    BackendInfo,
     BreakpointData,
     BreakpointType,
     DebuggerPlugin,
     ProcessState,
     RegisterData,
+    _scan_debugger_plugins,
 )
 
 
@@ -491,3 +493,128 @@ class TestStartProcess:
         ):
             with pytest.raises(OperationError, match="Failed to start process"):
                 plugin.start_process(path="/tmp/whatever")
+
+
+# ---------------------------------------------------------------------------
+# list_local_backends — discovery against IDA's plugins/ directory
+# ---------------------------------------------------------------------------
+
+
+class TestScanDebuggerPlugins:
+    """Direct tests for the scan helper, decoupled from filesystem layout."""
+
+    @pytest.mark.unit
+    def test_groups_user_and_stub_into_one_record(self, tmp_path):
+        # The point of grouping by basename: a single backend ships up to
+        # two files (local + remote stub). The scan must surface them as
+        # one record with both flags set, not two separate entries.
+        (tmp_path / "arm_mac_user.dylib").write_bytes(b"")
+        (tmp_path / "arm_mac_stub.dylib").write_bytes(b"")
+
+        backends = _scan_debugger_plugins(tmp_path)
+        assert len(backends) == 1
+        assert backends[0] == BackendInfo(
+            name="arm_mac",
+            local=True,
+            remote=True,
+            files=["arm_mac_stub.dylib", "arm_mac_user.dylib"],
+        )
+
+    @pytest.mark.unit
+    def test_marks_local_only_when_only_user_present(self, tmp_path):
+        (tmp_path / "gdb_user.dylib").write_bytes(b"")
+
+        backends = _scan_debugger_plugins(tmp_path)
+        assert len(backends) == 1
+        assert backends[0].name == "gdb"
+        assert backends[0].local is True
+        assert backends[0].remote is False
+
+    @pytest.mark.unit
+    def test_marks_remote_only_when_only_stub_present(self, tmp_path):
+        # The macOS arm64 case for win32: only the stub ships, so a caller
+        # asking for local win32 will fail. The scan reports remote=True,
+        # local=False, which is the right signal to tell the caller to
+        # use remote=True or pick a different backend.
+        (tmp_path / "win32_stub.dll").write_bytes(b"")
+
+        backends = _scan_debugger_plugins(tmp_path)
+        assert len(backends) == 1
+        assert backends[0].name == "win32"
+        assert backends[0].local is False
+        assert backends[0].remote is True
+
+    @pytest.mark.unit
+    def test_handles_dll_so_and_dylib(self, tmp_path):
+        # The same test should pass on any host: the scan accepts every
+        # extension IDA uses across platforms, not just the host's.
+        (tmp_path / "win32_user.dll").write_bytes(b"")
+        (tmp_path / "linux_user.so").write_bytes(b"")
+        (tmp_path / "arm_mac_user.dylib").write_bytes(b"")
+
+        names = {b.name for b in _scan_debugger_plugins(tmp_path)}
+        assert names == {"win32", "linux", "arm_mac"}
+
+    @pytest.mark.unit
+    def test_ignores_non_debugger_plugins(self, tmp_path):
+        # Plenty of non-debugger plugins live in the same directory
+        # (decompilers, signature engines, scripting bridges). They use
+        # different naming conventions and must NOT show up as backends.
+        (tmp_path / "hexx64.dylib").write_bytes(b"")          # decompiler
+        (tmp_path / "idapython3.dylib").write_bytes(b"")      # python bridge
+        (tmp_path / "dwarf.dylib").write_bytes(b"")           # debug info
+        (tmp_path / "arm_mac_user.dylib").write_bytes(b"")    # actual debugger
+
+        backends = _scan_debugger_plugins(tmp_path)
+        names = [b.name for b in backends]
+        assert names == ["arm_mac"]
+
+    @pytest.mark.unit
+    def test_ignores_non_plugin_files(self, tmp_path):
+        # plugins/ on real installs has plugins.cfg, .pdb, README files,
+        # and subdirectories. The scan must skip anything that isn't a
+        # plugin shared library.
+        (tmp_path / "plugins.cfg").write_text("# a config file")
+        (tmp_path / "ida_feeds").mkdir()
+        (tmp_path / "arm_mac_user.dylib").write_bytes(b"")
+
+        backends = _scan_debugger_plugins(tmp_path)
+        assert [b.name for b in backends] == ["arm_mac"]
+
+    @pytest.mark.unit
+    def test_returns_alphabetical_order(self, tmp_path):
+        # Stable ordering keeps the wire output deterministic for callers
+        # that diff successive runs (e.g. CI checking that a tool's
+        # advertised backend list hasn't changed).
+        for name in ("xnu", "arm_mac", "gdb", "linux"):
+            suffix = "_user" if name != "linux" else "_stub"
+            ext = ".dll" if name == "linux" else ".dylib"
+            (tmp_path / f"{name}{suffix}{ext}").write_bytes(b"")
+
+        names = [b.name for b in _scan_debugger_plugins(tmp_path)]
+        assert names == sorted(names)
+
+
+class TestListLocalBackendsOperation:
+    """End-to-end tests against the operation, with the plugins/ dir patched."""
+
+    @pytest.mark.unit
+    def test_returns_scan_result(self, plugin, tmp_path):
+        (tmp_path / "arm_mac_user.dylib").write_bytes(b"")
+        (tmp_path / "gdb_user.dylib").write_bytes(b"")
+        with patch(
+            "tenrec.plugins.plugins.debugger._ida_plugins_dir",
+            return_value=tmp_path,
+        ):
+            backends = plugin.list_local_backends()
+        names = [b.name for b in backends]
+        assert names == ["arm_mac", "gdb"]
+
+    @pytest.mark.unit
+    def test_raises_when_idadir_unavailable(self, plugin):
+        with patch(
+            "tenrec.plugins.plugins.debugger._ida_plugins_dir",
+            return_value=None,
+        ):
+            with pytest.raises(OperationError, match="Could not locate IDA's plugins"):
+                plugin.list_local_backends()
