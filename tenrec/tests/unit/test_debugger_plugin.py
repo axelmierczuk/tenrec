@@ -515,8 +515,8 @@ class TestScanDebuggerPlugins:
         assert len(backends) == 1
         assert backends[0] == BackendInfo(
             name="arm_mac",
-            local=True,
-            remote=True,
+            has_user_file=True,
+            has_stub_file=True,
             files=["arm_mac_stub.dylib", "arm_mac_user.dylib"],
         )
 
@@ -609,6 +609,135 @@ class TestListLocalBackendsOperation:
             backends = plugin.list_local_backends()
         names = [b.name for b in backends]
         assert names == ["arm_mac", "gdb"]
+
+    @pytest.mark.unit
+    def test_default_probe_false_does_not_call_load_debugger(self, plugin, tmp_path):
+        # The default code path should not poke ida_dbg at all — it's a
+        # filesystem-only operation. Patching load_debugger to fail loudly
+        # catches any accidental probe calls.
+        (tmp_path / "arm_mac_user.dylib").write_bytes(b"")
+        with (
+            patch(
+                "tenrec.plugins.plugins.debugger._ida_plugins_dir",
+                return_value=tmp_path,
+            ),
+            patch(
+                "tenrec.plugins.plugins.debugger.ida_dbg.load_debugger",
+                side_effect=AssertionError("load_debugger called when probe=False"),
+            ),
+        ):
+            backends = plugin.list_local_backends()
+        assert backends[0].loadable_local is None
+        assert backends[0].loadable_remote is None
+        assert backends[0].internal_name is None
+
+    @pytest.mark.unit
+    def test_probe_true_records_loadable_flags(self, plugin, tmp_path):
+        # Probe scenario the user is hitting on Windows: the file exists
+        # but neither local nor remote actually loads. The probe must
+        # record both False values so callers can see the file is dead.
+        (tmp_path / "win32_user.dll").write_bytes(b"")
+        with (
+            patch(
+                "tenrec.plugins.plugins.debugger._ida_plugins_dir",
+                return_value=tmp_path,
+            ),
+            patch(
+                "tenrec.plugins.plugins.debugger.ida_dbg.load_debugger",
+                return_value=False,
+            ),
+        ):
+            backends = plugin.list_local_backends(probe=True)
+        win32 = next(b for b in backends if b.name == "win32")
+        assert win32.has_user_file is True
+        assert win32.loadable_local is False
+        assert win32.loadable_remote is False
+
+    @pytest.mark.unit
+    def test_probe_records_internal_name_when_different(self, plugin, tmp_path):
+        # Smoking-gun case: file basename is win32 but the loaded plugin
+        # registers as windbg. The probe must surface the mismatch so
+        # the caller knows the *real* name to pass to load_backend().
+        (tmp_path / "win32_user.dll").write_bytes(b"")
+        with (
+            patch(
+                "tenrec.plugins.plugins.debugger._ida_plugins_dir",
+                return_value=tmp_path,
+            ),
+            patch(
+                "tenrec.plugins.plugins.debugger.ida_dbg.load_debugger",
+                return_value=True,
+            ),
+            patch(
+                "tenrec.plugins.plugins.debugger.ida_idd.dbg_get_name",
+                return_value="windbg",
+            ),
+        ):
+            backends = plugin.list_local_backends(probe=True)
+        win32 = next(b for b in backends if b.name == "win32")
+        assert win32.internal_name == "windbg"
+
+    @pytest.mark.unit
+    def test_probe_omits_internal_name_when_matching(self, plugin, tmp_path):
+        # When the plugin registers under its own basename, internal_name
+        # stays None — the field is meant to be a "this is surprising"
+        # signal, not noise on every record.
+        (tmp_path / "gdb_user.dylib").write_bytes(b"")
+        with (
+            patch(
+                "tenrec.plugins.plugins.debugger._ida_plugins_dir",
+                return_value=tmp_path,
+            ),
+            patch(
+                "tenrec.plugins.plugins.debugger.ida_dbg.load_debugger",
+                return_value=True,
+            ),
+            patch(
+                "tenrec.plugins.plugins.debugger.ida_idd.dbg_get_name",
+                return_value="gdb",
+            ),
+        ):
+            backends = plugin.list_local_backends(probe=True)
+        gdb = next(b for b in backends if b.name == "gdb")
+        assert gdb.internal_name is None
+        assert gdb.loadable_local is True
+
+    @pytest.mark.unit
+    def test_probe_swallows_load_debugger_exceptions(self, plugin, tmp_path):
+        # IDA can throw on bad plugin metadata mid-load. Probe must not
+        # crash the operation — the offending backend just gets recorded
+        # as loadable=False so the caller can move on.
+        (tmp_path / "arm_mac_user.dylib").write_bytes(b"")
+        with (
+            patch(
+                "tenrec.plugins.plugins.debugger._ida_plugins_dir",
+                return_value=tmp_path,
+            ),
+            patch(
+                "tenrec.plugins.plugins.debugger.ida_dbg.load_debugger",
+                side_effect=RuntimeError("plugin metadata corrupt"),
+            ),
+        ):
+            backends = plugin.list_local_backends(probe=True)
+        arm_mac = backends[0]
+        assert arm_mac.loadable_local is False
+        assert arm_mac.loadable_remote is False
+
+    @pytest.mark.unit
+    def test_back_compat_local_remote_properties(self, tmp_path):
+        # Older callers reading .local / .remote (file-presence flags)
+        # still work — the properties just delegate to has_user_file /
+        # has_stub_file. Pin this contract so the back-compat layer
+        # doesn't quietly disappear.
+        (tmp_path / "arm_mac_user.dylib").write_bytes(b"")
+        (tmp_path / "win32_stub.dll").write_bytes(b"")
+
+        backends = _scan_debugger_plugins(tmp_path)
+        by_name = {b.name: b for b in backends}
+        assert by_name["arm_mac"].local is True
+        assert by_name["arm_mac"].remote is False
+        assert by_name["win32"].local is False
+        assert by_name["win32"].remote is True
 
     @pytest.mark.unit
     def test_raises_when_idadir_unavailable(self, plugin):

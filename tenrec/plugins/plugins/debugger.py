@@ -103,15 +103,37 @@ class BackendInfo(BaseModel):
 
     A single backend can ship two plugin files: the ``*_user`` flavour for
     in-process debugging and the ``*_stub`` flavour for talking to an IDA
-    remote debug server. ``local`` and ``remote`` indicate which variants
-    are actually present on disk; pass ``remote=True`` to load_backend()
-    for the latter.
+    remote debug server. ``has_user_file`` / ``has_stub_file`` indicate
+    which variants are present on disk — but file presence isn't the same
+    as loadability. ``loadable_local`` / ``loadable_remote`` (populated only
+    when the discovery operation is run with ``probe=True``) report whether
+    ``ida_dbg.load_debugger(name, remote)`` actually succeeded for each
+    flag value in the current session.
+
+    The internal name a debugger plugin registers under can differ from
+    its filename basename (notably on Windows, where ``win32_user.dll``
+    may register as ``windbg`` or similar). When the loaded debugger's
+    internal name differs from the basename used to load it, ``probe``
+    surfaces it via ``internal_name``.
     """
 
     name: str
-    local: bool
-    remote: bool
+    has_user_file: bool
+    has_stub_file: bool
     files: list[str]
+    loadable_local: bool | None = None
+    loadable_remote: bool | None = None
+    internal_name: str | None = None
+
+    @property
+    def local(self) -> bool:
+        """Back-compat: True when a ``*_user`` file is present."""
+        return self.has_user_file
+
+    @property
+    def remote(self) -> bool:
+        """Back-compat: True when a ``*_stub`` file is present."""
+        return self.has_stub_file
 
 
 def _require_debugger() -> None:
@@ -181,15 +203,52 @@ def _scan_debugger_plugins(plugins_dir: Path) -> list[BackendInfo]:
             if path.stem.endswith(suffix):
                 name = path.stem[: -len(suffix)]
                 info = backends.setdefault(
-                    name, BackendInfo(name=name, local=False, remote=False, files=[])
+                    name,
+                    BackendInfo(
+                        name=name,
+                        has_user_file=False,
+                        has_stub_file=False,
+                        files=[],
+                    ),
                 )
                 if kind == "local":
-                    info.local = True
+                    info.has_user_file = True
                 else:
-                    info.remote = True
+                    info.has_stub_file = True
                 info.files.append(path.name)
                 break
     return sorted(backends.values(), key=lambda b: b.name)
+
+
+def _probe_backend(info: BackendInfo) -> None:
+    """Attempt to load each remote-variant of a backend; record outcomes in-place.
+
+    IDA's ``load_debugger`` is destructive — once a debugger is loaded the
+    active one in the session changes. This helper still calls it for both
+    ``remote=False`` and ``remote=True`` because that's the only reliable
+    way to learn which variants the file actually supports in the current
+    runtime. The caller is expected to run this through an unsafe-marked
+    operation, and to call ``load_backend`` with the desired backend
+    *afterwards* to install the one they actually want.
+    """
+    for remote in (False, True):
+        try:
+            ok = ida_dbg.load_debugger(info.name, remote)
+        except Exception:
+            ok = False
+        if remote:
+            info.loadable_remote = ok
+        else:
+            info.loadable_local = ok
+        if ok:
+            # Cache the internal debugger name. If a plugin registers under
+            # a different name than its basename, this is the smoking gun.
+            try:
+                resolved = ida_idd.dbg_get_name()
+            except Exception:
+                resolved = None
+            if resolved and resolved != info.name:
+                info.internal_name = resolved
 
 
 def _default_local_backend_name() -> str:
@@ -238,7 +297,9 @@ class DebuggerPlugin(PluginBase):
             (
                 "When load_backend() reports a name isn't loadable, call list_local_backends() to "
                 "see what IDA actually ships in plugins/ — the canonical names drift across "
-                "versions (e.g. on Windows 11 the local x86 debugger is usually 'windbg', not 'win32')."
+                "versions (e.g. on Windows 11 the local x86 debugger is usually 'windbg', not 'win32'). "
+                "Pass probe=True to also surface each plugin's *internal* registered name (which can "
+                "differ from the file basename) and which load_debugger(remote=...) variants succeed."
             ),
             "Omit name from load_backend() only when the database's target matches the host running IDA",
             "Always check is_running() before issuing live operations (registers, memory, stepping)",
@@ -345,34 +406,51 @@ class DebuggerPlugin(PluginBase):
         if not ida_dbg.load_debugger(chosen, remote):
             msg = (
                 f"Failed to load debugger backend {chosen!r} (remote={remote}). "
-                "Call list_local_backends() to see what's actually shipped in IDA's "
-                "plugins/ directory — debugger plugin filenames vary across IDA versions "
-                "(notably 'win32' on Windows 11)."
+                "Call list_local_backends(probe=True) to see which names actually "
+                "load in this session — debugger plugin filenames vary across IDA "
+                "versions and platforms, and an existing file may register under a "
+                "different internal name (notably on Windows, where 'win32_user.dll' "
+                "may register as 'windbg' or similar)."
             )
             raise OperationError(msg)
         if host is not None:
             ida_dbg.set_remote_debugger(host, password, port)
         return chosen
 
-    @operation()
-    def list_local_backends(self) -> list[BackendInfo]:
+    @operation(unsafe=True)
+    def list_local_backends(self, probe: bool = False) -> list[BackendInfo]:
         """List debugger backends discoverable in IDA's plugins/ directory.
 
         Use this when ``load_backend`` returns "Failed to load debugger backend" for a
         name you expected to work — IDA has renamed and re-arranged debugger plugins
-        across versions, so the documented name may not match what's on disk. The
-        returned ``name`` field is exactly what to pass to ``load_backend``; ``local``
-        and ``remote`` indicate whether ``remote=False`` and ``remote=True`` are
-        valid for that name.
+        across versions, so the documented name may not match what's on disk, and a
+        plugin file existing isn't the same as it being loadable in the current
+        session (some plugins refuse to load under headless idalib).
 
-        Examples of what callers typically see:
+        ## Two discovery modes
 
-        * macOS arm64: arm_mac (local + remote), gdb (local), bochs (local), pin (local)
-        * Linux x64: linux (remote), gdb (local), bochs (local)
-        * Windows 11: win32 (remote), windbg (local), gdb (local) — the "win32" local
-          plugin may not be present, in which case the local debugger is named
-          differently (frequently ``windbg``).
+        * ``probe=False`` (default): pure filesystem scan. Returns every basename
+          with at least one ``_user`` or ``_stub`` file present. ``has_user_file``
+          and ``has_stub_file`` reflect what's on disk. Fast and side-effect-free.
+        * ``probe=True``: same scan, plus calls ``ida_dbg.load_debugger(name, False)``
+          and ``...(name, True)`` for every basename and records which succeeded.
+          ``loadable_local`` / ``loadable_remote`` populated. **Destructive**: probing
+          changes the session's active debugger as a side effect, so call
+          ``load_backend()`` again afterwards to install the one you actually want.
+          Also captures the plugin's *internal* registered name in ``internal_name``
+          when it differs from the file basename — the smoking gun for "why doesn't
+          this name work" mysteries (e.g. on Windows, ``win32_user.dll`` may
+          register internally as ``windbg``).
 
+        ## When to use which
+
+        * The expected name worked and you just want a list → ``probe=False``.
+        * ``load_backend`` failed unexpectedly and you need to know whether the
+          plugin file is present, loadable, and what its real name is → ``probe=True``.
+
+        :param probe: If True, attempt to load each candidate to populate
+            ``loadable_local`` / ``loadable_remote`` / ``internal_name``. Mutates
+            the session's active debugger as a side effect.
         :return: BackendInfo per backend basename, alphabetically sorted.
         :raises OperationException: If IDA's plugins/ directory can't be located.
         """
@@ -383,7 +461,11 @@ class DebuggerPlugin(PluginBase):
                 "install path (e.g. '/Applications/IDA Professional 9.2.app/Contents/MacOS'."
             )
             raise OperationError(msg)
-        return _scan_debugger_plugins(plugins_dir)
+        backends = _scan_debugger_plugins(plugins_dir)
+        if probe:
+            for info in backends:
+                _probe_backend(info)
+        return backends
 
     @operation(unsafe=True)
     def attach(self, pid: int = -1, event_id: int = -1) -> int:
